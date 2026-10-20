@@ -2,7 +2,10 @@ package com.ggb.tv;
 
 import android.accessibilityservice.AccessibilityServiceInfo;
 import android.app.Activity;
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.BitmapShader;
@@ -16,6 +19,7 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Shader;
 import android.media.tv.TvInputManager;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
@@ -131,9 +135,14 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     // Welcome, when the home screen starts (boot, an update; not on every Home press): the glows come out of black,
     // the clock rises, the shelf lifts with its tiles popping in one by one, then the top buttons.
-    private static final long INTRO_MS = 1700;
+    // Also on waking up: the TV, turned on with its remote, wakes the box over HDMI-CEC, and the box boots or wakes
+    // well before the TV shows a picture, so the welcome waits a moment in black first.
+    private static final long INTRO_MS = 1700, WAKE_DELAY_MS = 1500;
+    private static boolean welcomed;   // once per process: not again when a settings change recreates the screen
     private long introAt;
-    private boolean introDone;
+    private final BroadcastReceiver screenOn = new BroadcastReceiver() {
+        @Override public void onReceive(Context c, Intent i) { replayIntro(WAKE_DELAY_MS); }
+    };
 
     // Theme change: the old look, captured, wiped away by a circle growing from the Theme button over the new one.
     private static final long REVEAL_MS = 650;
@@ -396,6 +405,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             addView(v);
         }
         setContentDescription("GGB TV");
+        IntentFilter wakeUp = new IntentFilter(Intent.ACTION_SCREEN_ON);
+        if (Build.VERSION.SDK_INT >= 33) a.getApplicationContext().registerReceiver(screenOn, wakeUp, Context.RECEIVER_NOT_EXPORTED);
+        else a.getApplicationContext().registerReceiver(screenOn, wakeUp);
         drawerLayer.setVisibility(INVISIBLE);
         revealLayer.setVisibility(INVISIBLE);
         for (int i = 0; i < topFocus.length; i++) {
@@ -461,6 +473,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     void destroy() {
         pause();
         click.release();
+        try {
+            getContext().getApplicationContext().unregisterReceiver(screenOn);
+        } catch (IllegalArgumentException ignored) {
+        }
     }
 
     /** Starting state (Home pressed while the home screen is showing): first app focused, drawer and sheet closed. */
@@ -572,7 +588,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     @Override protected void onSizeChanged(int width, int height, int oldWidth, int oldHeight) {
-        if (introAt == 0 && !introDone) introAt = SystemClock.uptimeMillis();
+        if (!welcomed) {
+            welcomed = true;
+            introAt = SystemClock.uptimeMillis();
+        }
         w = width;
         h = height;
         k = w / 1920f;
@@ -1966,14 +1985,20 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     /** Keeps the welcome's layers moving while it plays; true until it ends. */
     private boolean tickIntro(long up) {
         if (introAt == 0) return false;
-        if (up - introAt >= INTRO_MS) {
-            introAt = 0;
-            introDone = true;
-        }
+        if (up - introAt >= INTRO_MS) introAt = 0;
         motionDirty = true;
         tilesDirty = true;
         sky.invalidate();
         return introAt != 0;
+    }
+
+    /** Plays the welcome again, `delay` ms from now (black until then). */
+    private void replayIntro(long delay) {
+        introAt = SystemClock.uptimeMillis() + delay;
+        motionDirty = true;
+        tilesDirty = true;
+        sky.invalidate();
+        wake();
     }
 
     /** 0 → 1 over `ms`, `delay` ms into the welcome, easing out; 1 outside it. */
