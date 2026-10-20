@@ -1,3 +1,18 @@
+# GGB TV
+
+Личная сборка домашнего экрана для Android TV / Google TV (Xiaomi Mi Box S 2nd gen), сделанная на основе
+[Free My TV](https://github.com/simbasjungles/free-my-tv) (MIT). Отличия от оригинала: полка-карусель без
+лимита, настраиваемые верхние кнопки (Настройки, Bluetooth, Тема) с круговой сменой темы, мягкий плавающий
+фон, шрифт Nunito, русский интерфейс, отключение PatchWall и прочего мусора Xiaomi.
+
+Сборка на Windows: `bash build-win.sh` (нужны JDK 17+ и Android SDK, `ANDROID_HOME`). Ключ подписи
+`freemytv.keystore` и `config.properties` в репозиторий не попадают: храните их у себя, обновления
+подписываются тем же ключом.
+
+Ниже — README оригинального проекта.
+
+---
+
 <div align="center">
 
 <img src="docs/assets/icon-512.png" width="96" alt="">

@@ -5,7 +5,7 @@ import os
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-FONT = os.path.join(ROOT, "app/assets/fonts/InterVariable.ttf")
+FONT = os.path.join(ROOT, "app/assets/fonts/Nunito.ttf")
 STOPS = [(0.0, (255, 194, 122)), (0.5, (255, 122, 158)), (1.0, (154, 140, 255))]   # sunrise -> pink -> dusk
 
 
@@ -87,8 +87,8 @@ def banner(w=640, h=360):
     img = gradient(w * s, h * s, angle=20).convert("RGBA")
     m = mark(int(h * 0.5 * s), bg=False)
     d = ImageDraw.Draw(img)
-    f = font(int(h * 0.15 * s), 650)
-    text = "Free My TV"
+    f = font(int(h * 0.16 * s), 800)
+    text = "GGB TV"
     box = d.textbbox((0, 0), text, font=f)
     gap = int(w * 0.02 * s)
     total = m.width + gap + (box[2] - box[0])
