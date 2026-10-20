@@ -23,7 +23,6 @@ final class German {
             case "For You": return "Für dich";
             case "Couldn't open ": return "Konnte nicht öffnen: ";
             case " of ": return " von ";
-            case "← → move · OK done": return "← → verschieben · OK fertig";
             case "Moving ": return "Verschiebe ";
             case ", position ": return ", Position ";
             case ", tab ": return ", Tab ";

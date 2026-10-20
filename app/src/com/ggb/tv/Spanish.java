@@ -23,7 +23,6 @@ final class Spanish {
             case "For You": return "Para ti";
             case "Couldn't open ": return "No se pudo abrir ";
             case " of ": return " de ";
-            case "← → move · OK done": return "← → mover · OK listo";
             case ", tab ": return ", pestaña ";
             case " of 3": return " de 3";
             case "Dollar": return "Dólar";

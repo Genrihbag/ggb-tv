@@ -212,10 +212,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     // Moving apps on the shelf (as on Apple TV): hold OK on a tile, then ← → move it, OK drops it, Back cancels. The
     // lifted tile wiggles; the others slide to their new places (each slot's x offset is a spring that returns to 0).
     private static final long HOLD_MS = 500, WIGGLE_MS = 300;
-    private static final float LIFT_GROW = 0.08f, WIGGLE_DEG = 1.5f;
+    private static final float WIGGLE_DEG = 1.5f;
     private boolean reordering, reorderAnim, okHeld, holdArmed;
     private int liftIndex = -1;
-    private Paint moveHint;
     private long reorderAt;
     private float wiggle;
     private Spring[] tileSlide = new Spring[0];
@@ -351,7 +350,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             scene.setOffset(0, kind == DRAWER || kind == STATUS ? 0 : getTranslationY());
             switch (kind) {
                 case SKY: drawSky(c); break;
-                case HERO: drawLightTop(c); drawMoveHint(c); break;
+                case HERO: drawLightTop(c); break;
                 case STATUS: drawLightButtons(c); break;
                 case PLATTER: drawPlatter(c); break;
                 case TILES: drawTiles(c); break;
@@ -659,8 +658,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         buttonPaint = Ui.text(Ui.semibold, 29 * k, INK);
         capsuleText = Ui.numbers(Ui.medium, 29 * k, 0xF2FFFFFF);
         tipPaint = Ui.text(Ui.semibold, 25 * k, 0xF2FFFFFF);
-        moveHint = Ui.text(Ui.medium, 24 * k, 0xF2FFFFFF);
-        moveHint.setTextAlign(Paint.Align.CENTER);
         tipPaint.setTextAlign(Paint.Align.CENTER);
         tipPaint.setShadowLayer(16 * k, 0, 1 * k, 0x99000000);
         // Quotes: a subtle detail, smaller and dimmer than the rest.
@@ -1413,6 +1410,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             }
             c.restoreToCount(saved);
         }
+        drawMoveArrows(c);   // over the carousel's edges, never faded
     }
 
     /** Fades out what's drawn between `from` and `to`; `amount` 0 leaves it (nothing hidden on that side). */
@@ -1430,9 +1428,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
      */
     private void drawShelfTile(Canvas c, int i) {
         HomeApps.Item it = shelf.get(i);
-        // Lifted to be moved: a little bigger than focused, with a deeper shadow.
+        // Lifted to be moved: the focused size (it wiggles; growing more left no room for the arrows), a deeper shadow.
         float l = i == liftIndex ? Math.max(0, moveLift.value) : 0;
-        float f = tileFocus[i].value, fc = Ui.clamp(f), s = 1 + FOCUS_GROW * f + LIFT_GROW * l;
+        float f = tileFocus[i].value, fc = Ui.clamp(f), s = 1 + FOCUS_GROW * f;
         RectF base = tileRects[i];
         float bw = base.width(), bh = base.height(), r0 = TILE_RADIUS * k;
         float cx = base.centerX(), cy = base.centerY();
@@ -2494,20 +2492,37 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     /**
-     * While an app is lifted: a short hint in a glass pill just above the shelf, where the eyes already are (a toast at
-     * the top of the screen was too far and too wordy). It fades with the lift; Back cancels, as everywhere.
+     * While an app is lifted: a chevron in a small glass disc on each side it can still go, riding on the tile's edges
+     * as it moves and nudging outward, so ← → needs no words. Discs, not bare chevrons: in the gap they'd sit on the
+     * neighbor's colors, dark on dark or white on white depending on the look. Fades with the lift.
      */
-    private void drawMoveHint(Canvas c) {
+    private void drawMoveArrows(Canvas c) {
         float a = Ui.clamp(moveLift.value);
-        if (a <= 0.01f || platterRect.isEmpty()) return;
-        String text = Ui.tr("← → mover · OK pronto", "← → move · OK done");
-        float h = 50 * k, padX = 26 * k, width = moveHint.measureText(text) + 2 * padX;
-        float bottom = platterRect.top - 26 * k + (1 - a) * 10 * k, cx = platterRect.centerX();
-        tmp.set(cx - width / 2, bottom - h, cx + width / 2, bottom);
-        scene.liquid(c, tmp, h / 2, tone(0xFFFFFFFF, SMOKE), tone(0.42f, 0.12f), tone(0.03f, 0.08f), 10 * k, 6 * k,
-                tone(0.65f, 0.15f), a);
-        moveHint.setColor(Ui.alpha(tone(L_INK, 0xF2FFFFFF), a));
-        c.drawText(text, cx, tmp.centerY() + Ui.halfCap(moveHint), moveHint);
+        int i = liftIndex;
+        if (a <= 0.01f || i < 0 || i >= shelf.size() || i >= tileRects.length) return;
+        RectF t = tileRects[i];
+        float dx = i < tileSlide.length ? tileSlide[i].value : 0;
+        float s = 1 + FOCUS_GROW * tileFocus[i].value;
+        float half = t.width() * s / 2, cx = t.centerX() + dx, cy = t.centerY();
+        float phase = (SystemClock.uptimeMillis() % 1200) / 1200f;
+        float nudge = (0.5f - 0.5f * (float) Math.cos(phase * 2 * Math.PI)) * 7 * k;
+        float r = 24 * k, reach = half + 6 * k + nudge;
+        int ink = Ui.alpha(tone(L_INK, 0xF2FFFFFF), a);
+        for (int side = -1; side <= 1; side += 2) {
+            if (side < 0 ? i == 0 : i == shelf.size() - 1) continue;   // nowhere to go that way
+            float x = cx + side * reach;
+            cell.set(x - r, cy - r, x + r, cy + r);
+            tmp.set(cell);
+            tmp.offset(0, 6 * k);
+            shadow.setColor(Ui.alpha(0xFF000000, tone(0.18f, 0.35f) * a));
+            shadows.draw(c, tmp, r, SHADOW_BLUR * k, shadow);
+            scene.liquid(c, cell, r, tone(0xFFFFFFFF, SMOKE), tone(0.55f, 0.5f), tone(0.02f, 0.01f), 10 * k, 6 * k,
+                    tone(0.6f, 0.15f), a);
+            c.save();
+            if (side < 0) c.scale(-1, 1, x, cy);   // the left one: the same chevron, mirrored
+            Symbols.draw(getContext(), c, "chevron_right", x + 2 * k, cy, 26 * k, ink);
+            c.restore();
+        }
     }
 
     private void startReorder() {
@@ -2662,7 +2677,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     /** One frame of the move: the slides, the lift and the wiggle. Returns true while any of them moves. */
     private boolean stepReorder(float dt, long up) {
         boolean moving = step(tileSlide, dt) | moveLift.step(dt);
-        if (moving) heroDirty = true;   // the hint above the shelf follows the lift
         if (reordering || moveLift.value > 0.001f) {
             wiggle = WIGGLE_DEG * (float) Math.sin((up - reorderAt) * (2 * Math.PI / WIGGLE_MS));
             moving = true;
