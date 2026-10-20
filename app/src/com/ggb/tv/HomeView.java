@@ -215,6 +215,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private static final float LIFT_GROW = 0.08f, WIGGLE_DEG = 1.5f;
     private boolean reordering, reorderAnim, okHeld, holdArmed;
     private int liftIndex = -1;
+    private Paint moveHint;
     private long reorderAt;
     private float wiggle;
     private Spring[] tileSlide = new Spring[0];
@@ -350,7 +351,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             scene.setOffset(0, kind == DRAWER || kind == STATUS ? 0 : getTranslationY());
             switch (kind) {
                 case SKY: drawSky(c); break;
-                case HERO: drawLightTop(c); break;
+                case HERO: drawLightTop(c); drawMoveHint(c); break;
                 case STATUS: drawLightButtons(c); break;
                 case PLATTER: drawPlatter(c); break;
                 case TILES: drawTiles(c); break;
@@ -658,6 +659,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         buttonPaint = Ui.text(Ui.semibold, 29 * k, INK);
         capsuleText = Ui.numbers(Ui.medium, 29 * k, 0xF2FFFFFF);
         tipPaint = Ui.text(Ui.semibold, 25 * k, 0xF2FFFFFF);
+        moveHint = Ui.text(Ui.medium, 24 * k, 0xF2FFFFFF);
+        moveHint.setTextAlign(Paint.Align.CENTER);
         tipPaint.setTextAlign(Paint.Align.CENTER);
         tipPaint.setShadowLayer(16 * k, 0, 1 * k, 0x99000000);
         // Quotes: a subtle detail, smaller and dimmer than the rest.
@@ -2490,6 +2493,23 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         return it.kind == HomeApps.APP && it.pkg != null;
     }
 
+    /**
+     * While an app is lifted: a short hint in a glass pill just above the shelf, where the eyes already are (a toast at
+     * the top of the screen was too far and too wordy). It fades with the lift; Back cancels, as everywhere.
+     */
+    private void drawMoveHint(Canvas c) {
+        float a = Ui.clamp(moveLift.value);
+        if (a <= 0.01f || platterRect.isEmpty()) return;
+        String text = Ui.tr("← → mover · OK pronto", "← → move · OK done");
+        float h = 50 * k, padX = 26 * k, width = moveHint.measureText(text) + 2 * padX;
+        float bottom = platterRect.top - 26 * k + (1 - a) * 10 * k, cx = platterRect.centerX();
+        tmp.set(cx - width / 2, bottom - h, cx + width / 2, bottom);
+        scene.liquid(c, tmp, h / 2, tone(0xFFFFFFFF, SMOKE), tone(0.42f, 0.12f), tone(0.03f, 0.08f), 10 * k, 6 * k,
+                tone(0.65f, 0.15f), a);
+        moveHint.setColor(Ui.alpha(tone(L_INK, 0xF2FFFFFF), a));
+        c.drawText(text, cx, tmp.centerY() + Ui.halfCap(moveHint), moveHint);
+    }
+
     private void startReorder() {
         handler.removeCallbacks(holdStart);
         holdArmed = false;
@@ -2501,8 +2521,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         reorderAt = SystemClock.uptimeMillis();
         moveLift.target = 1;
         click.open();
-        showToast(Ui.tr("← → para mover · OK para soltar · Voltar para cancelar",
-                "← → to move · OK to drop · Back to cancel"));
         retarget(false);    // TalkBack reads "Moving <app>, position i of n"
     }
 
@@ -2644,6 +2662,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     /** One frame of the move: the slides, the lift and the wiggle. Returns true while any of them moves. */
     private boolean stepReorder(float dt, long up) {
         boolean moving = step(tileSlide, dt) | moveLift.step(dt);
+        if (moving) heroDirty = true;   // the hint above the shelf follows the lift
         if (reordering || moveLift.value > 0.001f) {
             wiggle = WIGGLE_DEG * (float) Math.sin((up - reorderAt) * (2 * Math.PI / WIGGLE_MS));
             moving = true;

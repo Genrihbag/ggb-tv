@@ -31,7 +31,7 @@ final class Russian {
             case "Top Buttons": return "Верхние кнопки";
             case "in the top buttons, place ": return "в верхних кнопках, место ";
             case "not in the top buttons": return "не в верхних кнопках";
-            case "← → to move · OK to drop · Back to cancel": return "← → — переместить · OK — оставить · Назад — отмена";
+            case "← → move · OK done": return "← → двигать · OK готово";
             case "Moving ": return "Перемещение: ";
             case ", position ": return ", место ";
             case "Couldn't open ": return "Не удалось открыть ";
