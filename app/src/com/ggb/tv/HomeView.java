@@ -129,6 +129,12 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private final RectF a11yRect = new RectF();
     private final Layer sky, heroLayer, status, platter, tiles, drawerLayer, sheetLayer, toastLayer, revealLayer;
 
+    // Welcome, when the home screen starts (boot, an update; not on every Home press): the glows come out of black,
+    // the clock rises, the shelf lifts with its tiles popping in one by one, then the top buttons.
+    private static final long INTRO_MS = 1700;
+    private long introAt;
+    private boolean introDone;
+
     // Theme change: the old look, captured, wiped away by a circle growing from the Theme button over the new one.
     private static final long REVEAL_MS = 650;
     private Bitmap revealShot;
@@ -566,6 +572,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     @Override protected void onSizeChanged(int width, int height, int oldWidth, int oldHeight) {
+        if (introAt == 0 && !introDone) introAt = SystemClock.uptimeMillis();
         w = width;
         h = height;
         k = w / 1920f;
@@ -683,6 +690,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         boolean revealing = tickReveal(up);
         if (glowOn()) stepGlow(up);
 
+        boolean introRunning = tickIntro(up);
         if (drawerMoving || sheetMoving || motionDirty) updateMotion();
         // Opening and closing the drawer only moves the cached layers: redrawing the glass on every frame made the TV
         // drop frames (measured: ~50 ms of GPU per frame). The app tiles have no glass; the top buttons fade out as
@@ -710,7 +718,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         // Busy: something is moving, or the sheet or the drawer is open.
         boolean busy = tilesMoving || statusMoving || heroMoving || drawerItemsMoving || gridMoving || drawerMoving
                 || sheetMoving || toastFading || heroFading || bgFading || nightMoving || sheetOpen || sheet.value > 0.001f
-                || drawerOpen || drawer.value > 0.001f || toast != null || !toasts.isEmpty() || revealing;
+                || drawerOpen || drawer.value > 0.001f || toast != null || !toasts.isEmpty() || revealing || introRunning;
         idle = !busy;
         if (busy) Choreographer.getInstance().postFrameCallback(this);
         else Choreographer.getInstance().postFrameCallbackDelayed(this, glowOn() ? GLOW_STEP_MS : 1000);
@@ -736,10 +744,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         float home = 1 - s, top = home * (1 - smoothstep(0, 0.32f, dc));
         float shift = SHIFT * k;
         float lift = -d * shift;
-        show(heroLayer, top, lift);
-        show(status, top, lift);
-        show(platter, home, lift);
-        show(tiles, home, lift);
+        float hero = intro(250, 650), buttons = intro(900, 550), shelfIn = intro(350, 750);
+        show(heroLayer, top * hero, lift + (1 - hero) * 40 * k);
+        show(status, top * buttons, lift);
+        show(platter, home * shelfIn, lift + (1 - shelfIn) * 140 * k);
+        show(tiles, home * intro(350, 250), lift + (1 - shelfIn) * 140 * k);
         float da = home * smoothstep(0.1f, 0.6f, dc);
         drawerLayer.setTranslationY((1 - d) * shift);
         drawerLayer.setAlpha(da);
@@ -1047,6 +1056,12 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     private void drawSky(Canvas c) {
         drawLightSky(c);
+        float in = intro(0, 800);
+        if (in < 1) {
+            fill.setShader(null);
+            fill.setColor(Ui.alpha(0xFF000000, 1 - in));
+            c.drawRect(screen, fill);
+        }
     }
 
     /** Blends a color on top (the drawer's veil) as part of drawing the image, without another layer. */
@@ -1328,7 +1343,17 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             for (int i = 0; i < shelf.size(); i++) {
                 if ((pass == 0) == (i == top)) continue;
                 if (carousel && (tileRects[i].right < left - 40 * k || tileRects[i].left > right + 40 * k)) continue;
-                drawShelfTile(c, i);
+                float pop = introBack(500 + 70 * Math.max(0, i - Math.round(shelfScroll.value)), 520);
+                if (pop < 1) {
+                    RectF t = tileRects[i];
+                    c.save();
+                    c.translate(0, (1 - pop) * 60 * k);
+                    c.scale(0.85f + 0.15f * pop, 0.85f + 0.15f * pop, t.centerX(), t.centerY());
+                    drawShelfTile(c, i);
+                    c.restore();
+                } else {
+                    drawShelfTile(c, i);
+                }
             }
         }
         if (carousel) {
@@ -1934,6 +1959,36 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             c.drawRoundRect(cell, r, r, rim);
             rim.setStrokeWidth(2.5f * k);
         }
+    }
+
+    // MARK: - Welcome
+
+    /** Keeps the welcome's layers moving while it plays; true until it ends. */
+    private boolean tickIntro(long up) {
+        if (introAt == 0) return false;
+        if (up - introAt >= INTRO_MS) {
+            introAt = 0;
+            introDone = true;
+        }
+        motionDirty = true;
+        tilesDirty = true;
+        sky.invalidate();
+        return introAt != 0;
+    }
+
+    /** 0 → 1 over `ms`, `delay` ms into the welcome, easing out; 1 outside it. */
+    private float intro(long delay, long ms) {
+        if (introAt == 0) return 1;
+        float t = Ui.clamp((SystemClock.uptimeMillis() - introAt - delay) / (float) ms);
+        float u = 1 - t;
+        return 1 - u * u * u;
+    }
+
+    /** The same with a slight overshoot (a tile popping in). */
+    private float introBack(long delay, long ms) {
+        if (introAt == 0) return 1;
+        float t = Ui.clamp((SystemClock.uptimeMillis() - introAt - delay) / (float) ms) - 1;
+        return 1 + 2.70158f * t * t * t + 1.70158f * t * t;
     }
 
     // MARK: - Theme change (circle)
