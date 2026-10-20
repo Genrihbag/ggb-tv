@@ -2492,9 +2492,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     /**
-     * While an app is lifted: a chevron in a small glass disc on each side it can still go, riding on the tile's edges
-     * as it moves and nudging outward, so ← → needs no words. Discs, not bare chevrons: in the gap they'd sit on the
-     * neighbor's colors, dark on dark or white on white depending on the look. Fades with the lift.
+     * While an app is lifted: a chevron on each side it can still go, in the gap beside it (over the shelf's glass, so
+     * ink by day and white at night read), riding along as it moves, so ← → needs no words. They stay still: the
+     * wiggling tile is motion enough. Fades with the lift.
      */
     private void drawMoveArrows(Canvas c) {
         float a = Ui.clamp(moveLift.value);
@@ -2502,25 +2502,15 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (a <= 0.01f || i < 0 || i >= shelf.size() || i >= tileRects.length) return;
         RectF t = tileRects[i];
         float dx = i < tileSlide.length ? tileSlide[i].value : 0;
-        float s = 1 + FOCUS_GROW * tileFocus[i].value;
-        float half = t.width() * s / 2, cx = t.centerX() + dx, cy = t.centerY();
-        float phase = (SystemClock.uptimeMillis() % 1200) / 1200f;
-        float nudge = (0.5f - 0.5f * (float) Math.cos(phase * 2 * Math.PI)) * 7 * k;
-        float r = 24 * k, reach = half + 6 * k + nudge;
+        float half = t.width() * (1 + FOCUS_GROW * tileFocus[i].value) / 2, cx = t.centerX() + dx, cy = t.centerY();
+        float reach = half + 13 * k;
         int ink = Ui.alpha(tone(L_INK, 0xF2FFFFFF), a);
         for (int side = -1; side <= 1; side += 2) {
             if (side < 0 ? i == 0 : i == shelf.size() - 1) continue;   // nowhere to go that way
             float x = cx + side * reach;
-            cell.set(x - r, cy - r, x + r, cy + r);
-            tmp.set(cell);
-            tmp.offset(0, 6 * k);
-            shadow.setColor(Ui.alpha(0xFF000000, tone(0.18f, 0.35f) * a));
-            shadows.draw(c, tmp, r, SHADOW_BLUR * k, shadow);
-            scene.liquid(c, cell, r, tone(0xFFFFFFFF, SMOKE), tone(0.55f, 0.5f), tone(0.02f, 0.01f), 10 * k, 6 * k,
-                    tone(0.6f, 0.15f), a);
             c.save();
             if (side < 0) c.scale(-1, 1, x, cy);   // the left one: the same chevron, mirrored
-            Symbols.draw(getContext(), c, "chevron_right", x + 2 * k, cy, 26 * k, ink);
+            Symbols.draw(getContext(), c, "chevron_right", x, cy, 38 * k, ink);
             c.restore();
         }
     }
