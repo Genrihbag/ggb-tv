@@ -1564,20 +1564,21 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     /** Glass for a drawer card or button: white by day, smoked at night (both during the transition). */
-    private void drawerGlass(Canvas c, RectF r, float radius, float lightTint, int shadowColor, float drop) {
-        float dk = dark();
-        if (dk < 0.999f) {
-            tmp.set(r);
-            tmp.offset(0, drop);
-            shadow.setColor(Ui.alpha(shadowColor, 1 - dk));
-            shadows.draw(c, tmp, radius, SHADOW_BLUR * k, shadow);
-            scene.glass(c, r, radius, 0xFFFFFFFF, lightTint, 0, 0, 0.02f, 1, 1 - dk);
-        }
-        if (dk > 0.001f) scene.glass(c, r, radius, SMOKE, 0.4f, 0, 0, 0.02f, 1, dk);
+    /**
+     * The drawer's keys and cards: the shelf's liquid glass (white by day, smoked at night) with its shadow, so the
+     * drawer reads as the same material; keys get the top buttons' thinner rim.
+     */
+    private void drawerGlass(Canvas c, RectF r, float radius, float drop, boolean card) {
+        tmp.set(r);
+        tmp.offset(0, drop);
+        shadow.setColor(tone(0x1F000000, 0x52000000));
+        shadows.draw(c, tmp, radius, SHADOW_BLUR * k, shadow);
+        scene.liquid(c, r, radius, tone(0xFFFFFFFF, SMOKE), tone(0.42f, 0.12f), tone(0.03f, 0.08f),
+                (card ? tone(30, 34) : 12) * k, (card ? tone(22, 28) : 8) * k, tone(0.65f, 0.15f), 1);
     }
 
     private void drawerCard(Canvas c, RectF r) {
-        drawerGlass(c, r, 30 * k, 0.72f, 0x1A000000, 10 * k);
+        drawerGlass(c, r, 30 * k, 18 * k, true);
     }
 
     private void drawDrawer(Canvas c) {
@@ -1616,7 +1617,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             shadow.setColor(Ui.alpha(0xFF000000, 0.45f * f));
             shadows.draw(c, tmp, r, SHADOW_BLUR * k, shadow);
         }
-        if (f < 0.99f) drawerGlass(c, cell, r, 0.7f, 0x14000000, 6 * k);
+        if (f < 0.99f) drawerGlass(c, cell, r, 8 * k, false);
         if (f > 0.01f) {
             fill.setShader(null);
             fill.setColor(Ui.alpha(WHITE, f));
