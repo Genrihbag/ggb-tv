@@ -285,7 +285,9 @@ var Data = (function () {
     pt: {'Action & Adventure': 'Ação e Aventura', 'Sci-Fi & Fantasy': 'Ficção Científica e Fantasia', 'War & Politics': 'Guerra e Política',
       'Kids': 'Infantil', 'News': 'Notícias', 'Soap': 'Novela', 'Talk': 'Entrevistas'},
     es: {'Action & Adventure': 'Acción y Aventura', 'Sci-Fi & Fantasy': 'Ciencia ficción y Fantasía', 'War & Politics': 'Guerra y Política',
-      'Kids': 'Infantil', 'News': 'Noticias', 'Soap': 'Telenovela', 'Talk': 'Entrevistas'}
+      'Kids': 'Infantil', 'News': 'Noticias', 'Soap': 'Telenovela', 'Talk': 'Entrevistas'},
+    de: {'Action & Adventure': 'Action & Abenteuer', 'War & Politics': 'Krieg & Politik', 'Kids': 'Kinder', 'News': 'Nachrichten',
+      'Soap': 'Seifenoper', 'Talk': 'Talkshow'}
   };
 
   /** The best backdrop: no text over it, the largest, then the best rated. */
@@ -328,8 +330,25 @@ var Data = (function () {
       }
       if (p.service && p.app) parts.push(p.service);
       p.meta = parts.join(' · ');
-      p.detailed = true;
-      done(null);
+      title(p, o, function () {
+        p.detailed = true;
+        done(null);
+      });
+    });
+  }
+
+  /**
+   * Without a title in the TV's language TMDB answers with the original one, so a Korean series on a German TV reads
+   * "닥터X: 하얀 마피아의 시대". Then the English title, when TMDB has one (one more request, only for those).
+   */
+  function title(p, o, done) {
+    var field = p.kind === 'movie' ? 'title' : 'name', own = o[field] || p.title;
+    p.title = own;
+    if (I18N.lang === 'en' || !own || own !== o['original_' + field] || o.original_language === I18N.lang
+        || o.original_language === 'en') { done(); return; }
+    tmdb('/' + p.kind + '/' + p.id + '?language=en-US', function (err, en) {
+      if (!err && en && en[field]) p.title = en[field];
+      done();
     });
   }
 
@@ -500,6 +519,7 @@ var Data = (function () {
     hour: function (at) {
       var d = new Date(at), h = d.getHours();
       if (I18N.lang === 'en') return (h % 12 || 12) + (h < 12 ? ' AM' : ' PM');
+      if (I18N.lang === 'de') return (h < 10 ? '0' : '') + h + ' Uhr';
       return (I18N.lang === 'es' || I18N.lang === 'ru') ? (h < 10 ? '0' : '') + h + ':00' : h + 'h';
     },
     time: function (at) {
