@@ -489,11 +489,13 @@ final class HomeApps {
         return "hdmi";
     }
 
-    /** Installed, enabled TV apps that are not on the home screen (the TV's Settings is among them), plus our own. */
+    /**
+     * Every installed, enabled TV app (the TV's Settings among them, the shelf's too: All Apps is the full list; it used
+     * to leave out the built-in SHELF apps, so YouTube was missing), plus our own settings.
+     */
     static List<Item> others(Context c) {
         PackageManager pm = c.getPackageManager();
         Set<String> skip = new HashSet<>();
-        for (String[] d : SHELF) skip.add(d[2]);
         skip.addAll(java.util.Arrays.asList(LIVE_TV_APPS));
         skip.add(c.getPackageName());
         skip.addAll(HIDDEN);

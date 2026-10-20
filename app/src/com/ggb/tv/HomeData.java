@@ -42,8 +42,27 @@ final class HomeData {
         return Prefs.latitude() + "," + Prefs.longitude();
     }
 
-    private static String weatherUrl() {
-        return "https://api.open-meteo.com/v1/forecast?latitude=" + Prefs.latitude() + "&longitude=" + Prefs.longitude() + WEATHER_QUERY;
+    /**
+     * Open-Meteo's forecast, then two of its other hosts that answer the same query with the same data (current,
+     * hourly, daily): some networks (Russian ISPs, for one) block api.open-meteo.com's address but not theirs.
+     */
+    private static final String[] WEATHER_HOSTS = {"api", "historical-forecast-api", "previous-runs-api"};
+
+    private static String weatherUrl(String host) {
+        return "https://" + host + ".open-meteo.com/v1/forecast?latitude=" + Prefs.latitude() + "&longitude=" + Prefs.longitude() + WEATHER_QUERY;
+    }
+
+    /** The first host that answers. */
+    private static String fetchWeather() throws IOException {
+        IOException last = null;
+        for (String host : WEATHER_HOSTS) {
+            try {
+                return get(weatherUrl(host));
+            } catch (IOException e) {
+                last = e;
+            }
+        }
+        throw last;
     }
     private static final long PRICES_EVERY = 5 * 60_000L, WEATHER_EVERY = 30 * 60_000L;
     interface Listener { void onData(); }
@@ -165,7 +184,7 @@ final class HomeData {
             fetchingWeather = true;
             io.execute(() -> {
                 try {
-                    String body = get(weatherUrl());
+                    String body = fetchWeather();
                     weather = parseWeather(body);
                     weatherAt = System.currentTimeMillis();
                     cache.edit().putString("weather", body).putLong("weatherAt", weatherAt).putString("weatherPlace", weatherPlace()).apply();
