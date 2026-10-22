@@ -159,6 +159,8 @@ final class HomeApps {
             }
             items.add(it);
         }
+        // At the end of the shelf: All Apps, so the carousel leads straight to the rest (not saved with the apps).
+        items.add(shortcut(ALL_APPS, "all", Ui.tr("All Apps"), "apps"));
         return items;
     }
 

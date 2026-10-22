@@ -82,7 +82,6 @@
  "Not installed": "Not installed",
  "Nothing": "Nothing",
  "Nothing half-watched in your apps.": "Nothing half-watched in your apps.",
- "OK adds or removes (up to {n}). ← → change the order.": "OK adds or removes (up to {n}). ← → change the order.",
  "OK adds or removes a button (up to {n}). ← → change the order.": "OK adds or removes a button (up to {n}). ← → change the order.",
  "OK adds or removes · ← → change the order": "OK adds or removes · ← → change the order",
  "OK or the arrows change the value.": "OK or the arrows change the value.",
@@ -154,6 +153,7 @@
  "Your TV's home screen and screensaver": "Your TV's home screen and screensaver",
  "debugging is off on the TV (port 5555 closed)": "debugging is off on the TV (port 5555 closed)",
  "debugging permission wasn't accepted on the TV": "debugging permission wasn't accepted on the TV",
+ "format|EEE d": "EEE d",
  "format|EEEE, MMMM d": "EEEE, MMMM d",
  "format|h a": "h a",
  "format|h:mm": "h:mm",
@@ -202,6 +202,5 @@
  "{n} min ago": "{n} min ago",
  "{n} min left": "{n} min left",
  "{n} ms": "{n} ms",
- "{on} of {total}": "{on} of {total}",
- "← → to move · OK to drop · Back to cancel": "← → to move · OK to drop · Back to cancel"
+ "{on} of {total}": "{on} of {total}"
 }

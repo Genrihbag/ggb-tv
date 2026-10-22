@@ -22,8 +22,10 @@ final class Click {
 
     Click(Context c) {
         try {
+            // The media stream, not the system one: video apps mute the system stream while they play and don't always
+            // unmute it, which silenced the clicks until a reboot.
             pool = new SoundPool.Builder().setMaxStreams(3).setAudioAttributes(new AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                    .setUsage(AudioAttributes.USAGE_GAME)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()).build();
             move = pool.load(wav(c, "click-move.wav", 1450f, 0.009f, 0.030f), 1);
             open = pool.load(wav(c, "click-open.wav", 880f, 0.022f, 0.090f), 1);

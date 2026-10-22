@@ -319,7 +319,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private long lastNanos, resumedAt, lastStep;
     private int w, h;
     private float k = 1;
-    private String clockText = "", dateText = "", weatherLine = "";
+    private String clockText = "", dateText = "", shortDateText = "", weatherLine = "";
     private long weatherLineAt = -1;
     private int weatherLinePrefs = -1;
     private String weatherLineLanguage = "";
@@ -901,6 +901,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         clockMinute = minute;
         clockText = Ui.clock(now);
         dateText = Ui.date(now);
+        shortDateText = Ui.shortDate(now);
         return true;
     }
 
@@ -1634,9 +1635,25 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             tileFill.setColor(0xFF161618);
             c.drawRoundRect(cell, r, r, tileFill);
             drawLogo(c, it, cell, s, 0);
+        } else if (it.kind == HomeApps.ALL_APPS) {
+            drawAllAppsTile(c, it, cell, r, fc);
         } else {
             if (it.tile != null) roundImage(c, it.tile, cell, r);
         }
+    }
+
+    /** The All Apps tile at the end of the shelf: its icon and name on a plain tile, white when focused. */
+    private void drawAllAppsTile(Canvas c, HomeApps.Item it, RectF cell, float r, float f) {
+        tileFill.setShader(null);
+        tileFill.setColor(blend(tone(0xFFF2F2F7, 0xFF2C2C2E), WHITE, f));
+        c.drawRoundRect(cell, r, r, tileFill);
+        int ink = blend(tone(L_INK, 0xF2FFFFFF), INK, f);
+        float s = cell.height() / (tileH > 0 ? tileH : cell.height());
+        Symbols.draw(getContext(), c, it.symbol, cell.centerX(), cell.top + cell.height() * 0.38f, 40 * k * s, ink);
+        drawerLabel.setColor(ink);
+        drawerLabel.setTextSize(24 * k * s);
+        float wide = drawerLabel.measureText(it.label);
+        c.drawText(it.label, cell.centerX() - wide / 2, cell.top + cell.height() * 0.78f, drawerLabel);
     }
 
     /**
@@ -2713,8 +2730,14 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     // MARK: - Moving apps on the shelf
 
+    /** The shelf's apps: all of it but the All Apps tile at the end, which stays there. */
+    private int shelfApps() {
+        int n = shelf.size();
+        return n > 0 && shelf.get(n - 1).kind == HomeApps.ALL_APPS ? n - 1 : n;
+    }
+
     private boolean canReorder() {
-        if (sheetOpen || zone != Z_SHELF || shelfIndex >= shelf.size() || shelf.size() < 2) return false;
+        if (sheetOpen || zone != Z_SHELF || shelfIndex >= shelfApps() || shelfApps() < 2) return false;
         HomeApps.Item it = shelf.get(shelfIndex);
         return it.kind == HomeApps.APP && it.pkg != null;
     }
@@ -2734,7 +2757,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         float reach = half + 13 * k;
         int ink = Ui.alpha(tone(L_INK, 0xF2FFFFFF), a);
         for (int side = -1; side <= 1; side += 2) {
-            if (side < 0 ? i == 0 : i == shelf.size() - 1) continue;   // nowhere to go that way
+            if (side < 0 ? i == 0 : i == shelfApps() - 1) continue;   // nowhere to go that way
             float x = cx + side * reach;
             c.save();
             if (side < 0) c.scale(-1, 1, x, cy);   // the left one: the same chevron, mirrored
@@ -2797,7 +2820,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     /** Swaps the lifted app with its neighbor; both slide from where they are to their new slots. */
     private void shiftReorder(int dx) {
         int i = shelfIndex, j = i + dx;
-        if (j < 0 || j >= shelf.size()) return;
+        if (j < 0 || j >= shelfApps()) return;
         HomeApps.Item it = shelf.get(i);
         shelf.set(i, shelf.get(j));
         shelf.set(j, it);
@@ -2834,7 +2857,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         retarget(false);
         if (!changed) return;
         final List<String> order = new ArrayList<>();
-        for (HomeApps.Item it : shelf) order.add(it.pkg);
+        for (HomeApps.Item it : shelf) if (it.pkg != null) order.add(it.pkg);
         final Context c = getContext().getApplicationContext();
         LOADER.execute(() -> {
             // The saved list may hold more than the shelf shows (apps not installed, past the limit): the shown ones
@@ -3177,12 +3200,27 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     // MARK: - Light design: title, tabs, cards and icon-only buttons
 
-    /** With the picks or Continue Watching on top, the time stays: smaller, left of the round buttons. */
+    /**
+     * With the picks or Continue Watching on top, the clock stays as one line left of the round buttons: the day and
+     * the date, the time, and the weather now (its icon and the temperature).
+     */
     private void drawCornerClock(Canvas c) {
-        float right = CONTENT_R * k;
+        float right = CONTENT_R * k, cy = L_BUTTON_CY * k;
         for (int i = 3; i < 3 + lightButtons.size(); i++) right = Math.min(right, topRects[i].left - 32 * k);
-        c.drawText(clockText, right - lCornerClock.measureText(clockText), L_BUTTON_CY * k + Ui.halfCap(lCornerClock),
-                lCornerClock);
+        HomeData.Weather wx = data.weather;
+        if (Prefs.weather() && !Double.isNaN(wx.temp)) {
+            String temp = HomeData.degrees(wx.temp);
+            float tw = lWeather.measureText(temp);
+            c.drawText(temp, right - tw, cy + Ui.halfCap(lWeather), lWeather);
+            String symbol = Symbols.weather(wx.code, wx.isDay);
+            float size = 38 * k, sw = Symbols.width(getContext(), symbol, size);
+            Symbols.draw(getContext(), c, symbol, right - tw - 10 * k - sw / 2, cy, size, lWeather.getColor());
+            right -= tw + 10 * k + sw + 30 * k;
+        }
+        float cw = lCornerClock.measureText(clockText);
+        c.drawText(clockText, right - cw, cy + Ui.halfCap(lCornerClock), lCornerClock);
+        right -= cw + 24 * k;
+        c.drawText(shortDateText, right - lDate.measureText(shortDateText), cy + Ui.halfCap(lDate), lDate);
     }
 
     private void layoutLight() {

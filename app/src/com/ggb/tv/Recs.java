@@ -52,7 +52,13 @@ final class Recs {
 
     interface Listener { void onRecs(); }
 
-    private static final String API = "https://api.themoviedb.org/3";
+    /**
+     * TMDB's API, then a mirror of it: Russian providers answer api.themoviedb.org with 127.0.0.1 (the DNS is
+     * blocked, the server isn't), and the mirror (apitmdb.cub.red, what Lampa uses there) passes the same requests on.
+     */
+    private static final String[] API_HOSTS = {"https://api.themoviedb.org/3", "https://apitmdb.cub.red/3"};
+    /** The API host that answered last: a blocked one costs its failure only once. */
+    private static volatile int apiHost;
     /** The backdrops: on a 720p UI, TMDB's 1280-wide copy shows the same and is lighter to download and decode. */
     private static final String IMAGES = "/t/p/" + (Backdrop.W <= 1280 ? "w1280" : "original");
     /** TMDB's image server, then a mirror of it: some providers (in Russia) block image.tmdb.org but not the API. */
@@ -699,8 +705,30 @@ final class Recs {
     private JSONObject get(String path) throws IOException, org.json.JSONException {
         String key = readKey();
         if (key == null) throw new IOException("no TMDB key");
+        IOException failed = null;
+        for (int i = 0; i < API_HOSTS.length; i++) {
+            int host = (apiHost + i) % API_HOSTS.length;
+            try {
+                JSONObject o = get(API_HOSTS[host], path, key);
+                if (host != apiHost) AppLog.w("TMDB through " + API_HOSTS[host]);
+                apiHost = host;
+                return o;
+            } catch (KeyRejected e) {
+                throw e;
+            } catch (IOException e) {
+                failed = e;
+            }
+        }
+        throw failed;
+    }
+
+    private static final class KeyRejected extends IOException {
+        KeyRejected() { super("TMDB rejected the key"); }
+    }
+
+    private static JSONObject get(String api, String path, String key) throws IOException, org.json.JSONException {
         boolean bearer = key.startsWith("eyJ");   // read access token (v4) or API key (v3)
-        String url = API + path + (bearer ? "" : (path.contains("?") ? "&" : "?") + "api_key=" + URLEncoder.encode(key, "UTF-8"));
+        String url = api + path + (bearer ? "" : (path.contains("?") ? "&" : "?") + "api_key=" + URLEncoder.encode(key, "UTF-8"));
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
         c.setConnectTimeout(8000);
         c.setReadTimeout(8000);
@@ -708,7 +736,8 @@ final class Recs {
         if (bearer) c.setRequestProperty("Authorization", "Bearer " + key);
         try {
             int code = c.getResponseCode();
-            if (code == 401) throw new IOException("TMDB rejected the key");
+            // Only TMDB itself says the key is wrong: a mirror's 401 may be its own, so the next host gets a turn.
+            if (code == 401 && api.equals(API_HOSTS[0])) throw new KeyRejected();
             if (code != 200) throw new IOException("TMDB returned HTTP " + code);
             return new JSONObject(read(c.getInputStream()));
         } finally {

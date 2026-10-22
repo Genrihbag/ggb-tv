@@ -154,6 +154,7 @@
  "Your TV's home screen and screensaver": "Главный экран и заставка телевизора",
  "debugging is off on the TV (port 5555 closed)": "отладка на телевизоре выключена (порт 5555 закрыт)",
  "debugging permission wasn't accepted on the TV": "на телевизоре не разрешена отладка",
+ "format|EEE d": "EEE, d",
  "format|EEEE, MMMM d": "EEEE, d MMMM",
  "format|h a": "HH:mm",
  "format|h:mm": "HH:mm",

@@ -216,6 +216,7 @@ public class SettingsActivity extends Activity {
         private String rowText(int row) {
             switch (screen) {
                 case MAIN: {
+                    row = mainRow(row);
                     if (row == 0) {
                         String busyText = busyText();
                         String value = busy() ? (busyText.isEmpty() ? Ui.tr("Starting…") : busyText)
@@ -383,7 +384,7 @@ public class SettingsActivity extends Activity {
 
         private int rowCount() {
             switch (screen) {
-                case MAIN: return 7;
+                case MAIN: return RemoteKeys.supported() ? 7 : 6;
                 case HOME_CHOICE: return 2;
                 case HOME_SETTINGS: return settingLabels().length;
                 case PICKER: return Math.min(PICK_VISIBLE, pickLabels.size());
@@ -432,6 +433,10 @@ public class SettingsActivity extends Activity {
                     Ui.tr("Home Settings"), Ui.tr("Shelf"), Ui.tr("Top Buttons"),
                     Ui.tr("Remote Buttons"), Ui.tr("TV Settings")};
             String[] values = {working ? "" : mode, Ui.tr("Preview"), "", "", "", "", ""};
+            if (!RemoteKeys.supported()) {
+                labels = new String[] {labels[0], labels[1], labels[2], labels[3], labels[4], labels[6]};
+                values = new String[] {values[0], values[1], "", "", "", ""};
+            }
             for (int i = 0; i < labels.length; i++) {
                 float y = (MAIN_TOP + i * (ROW_H + MAIN_GAP)) * k;
                 rowRect.set(LIST_X * k, y, LIST_R * k, y + ROW_H * k);
@@ -746,6 +751,14 @@ public class SettingsActivity extends Activity {
         private String topContent() {
             String top = Prefs.topContent();
             return top.equals(Prefs.TOP_PICKS) && !Recs.hasKey(getContext()) ? Prefs.TOP_NONE : top;
+        }
+
+        /**
+         * A row of the main screen as the full list counts it: without Remote Buttons (only on the TVs whose remotes
+         * RemoteKeys knows), the rows after it move up one.
+         */
+        private static int mainRow(int row) {
+            return !RemoteKeys.supported() && row >= 5 ? row + 1 : row;
         }
 
         /** "auto", then English and every language with a catalogue. */
@@ -1251,23 +1264,23 @@ public class SettingsActivity extends Activity {
                 adjust(1);
                 invalidate();
                 return;
-            } else if (focus == 0) {
+            } else if (mainRow(focus) == 0) {
                 if (busy()) return;
                 screen = HOME_CHOICE;
                 focus = freeActive() ? 0 : 1;
-            } else if (focus == 1) {
+            } else if (mainRow(focus) == 1) {
                 pause();
                 activity.showPreview();
-            } else if (focus == 2) {
+            } else if (mainRow(focus) == 2) {
                 screen = HOME_SETTINGS;
                 focus = 0;
                 watchApps = null;
                 scanWatchApps();
-            } else if (focus == 3) {
+            } else if (mainRow(focus) == 3) {
                 openShelfEditor(false);
-            } else if (focus == 4) {
+            } else if (mainRow(focus) == 4) {
                 openShelfEditor(true);
-            } else if (focus == 5) {
+            } else if (mainRow(focus) == 5) {
                 HomeMode.ensureRemoteService(c, 0);   // the buttons work from inside other apps through this service
                 loadApps();
                 screen = REMOTE_KEYS;

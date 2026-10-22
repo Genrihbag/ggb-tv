@@ -154,6 +154,7 @@
  "Your TV's home screen and screensaver": "Startbildschirm und Bildschirmschoner des Fernsehers",
  "debugging is off on the TV (port 5555 closed)": "Debugging ist am Fernseher aus (Port 5555 geschlossen)",
  "debugging permission wasn't accepted on the TV": "die Debugging-Erlaubnis wurde am Fernseher nicht bestätigt",
+ "format|EEE d": "EEE, d.",
  "format|EEEE, MMMM d": "EEEE, d. MMMM",
  "format|h a": "HH 'Uhr'",
  "format|h:mm": "HH:mm",

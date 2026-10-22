@@ -418,6 +418,11 @@ final class Ui {
         return Ui.datePattern("format|EEEE, MMMM d").format(now);
     }
 
+    /** "Thu 22": the day and the date, without the month (the line beside the small clock). */
+    static String shortDate(long now) {
+        return Ui.datePattern("format|EEE d").format(now);
+    }
+
     /** Spinning arc (work in progress). */
     static void spinner(Canvas c, float cx, float cy, float r, float seconds, Paint stroke) {
         OVAL.set(cx - r, cy - r, cx + r, cy + r);
