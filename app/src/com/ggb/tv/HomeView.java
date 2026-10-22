@@ -213,7 +213,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private Paint menuTitlePaint, menuSubPaint, menuOptionPaint;
     private final RectF[] cardRects = new RectF[3];
     private final List<HomeApps.Item> lightButtons = new ArrayList<>();
-    private Paint lTitle, lTab, lTabOn, lCardTitle, lCardMeta, lQuote, lTip, lDate, lClock, lWeather, lClockQuote;
+    private Paint lTitle, lTab, lTabOn, lCardTitle, lCardMeta, lQuote, lTip, lDate, lClock, lWeather, lClockQuote, lCornerClock;
     private Shader lightGradient;
     // Continue Watching: the background takes the focused card's colour (worked out once per picture, WatchArt), easing
     // from one to the next. Drawn as a plain fill under a fixed shade, so a colour change creates nothing per frame.
@@ -726,6 +726,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         lClock.setLetterSpacing(-0.01f);
         lWeather = Ui.text(Ui.medium, 34 * k, L_DIM);
         lClockQuote = Ui.numbers(Ui.medium, 28 * k, L_DIM);
+        lCornerClock = Ui.numbers(Ui.semibold, 50 * k, L_INK);
         lightGradient = tintShade = null;
         buttonPaint = Ui.text(Ui.semibold, 29 * k, INK);
         capsuleText = Ui.numbers(Ui.medium, 29 * k, 0xF2FFFFFF);
@@ -835,7 +836,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 refreshHero(false);
                 heroLayer.invalidate();
             }
-            if (clockMode()) heroLayer.invalidate();
+            heroLayer.invalidate();   // the big clock, or the small one in the corner
         }
 
         // Busy: something is moving, or the sheet or the drawer is open.
@@ -1156,6 +1157,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         lClock.setColor(tone(L_INK, WHITE));
         lWeather.setColor(tone(L_DIM, 0xFF98989D));
         lClockQuote.setColor(tone(L_DIM, 0xFF98989D));
+        lCornerClock.setColor(tone(L_INK, WHITE));
         staleQuote.setColor(tone(L_FAINT, 0x99FFFFFF));
         if (continueMode()) applyWatchContrast();
     }
@@ -3173,6 +3175,14 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     // MARK: - Light design: title, tabs, cards and icon-only buttons
 
+    /** With the picks or Continue Watching on top, the time stays: smaller, left of the round buttons. */
+    private void drawCornerClock(Canvas c) {
+        float right = CONTENT_R * k;
+        for (int i = 3; i < 3 + lightButtons.size(); i++) right = Math.min(right, topRects[i].left - 32 * k);
+        c.drawText(clockText, right - lCornerClock.measureText(clockText), L_BUTTON_CY * k + Ui.halfCap(lCornerClock),
+                lCornerClock);
+    }
+
     private void layoutLight() {
         if (lTab == null) return;
         // Text tabs; the focus pill extends 26 px past the text (the first tab's text starts at the margin).
@@ -3775,6 +3785,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             if (HomeData.coinCount() > 0) drawQuotes(c);
             return;
         }
+        drawCornerClock(c);
         String hello = picksMode() ? Ui.tr("For You") : Ui.tr("Continue Watching");
         c.drawText(hello, MARGIN * k - Ui.leftBearing(lTitle, hello), L_TITLE_BASE * k, lTitle);
         titleRight = MARGIN * k + lTitle.measureText(hello);
