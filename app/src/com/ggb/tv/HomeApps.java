@@ -61,6 +61,8 @@ final class HomeApps {
     static final int BLUETOOTH = 8;
     /** The "Theme" button: Automatic → Light → Dark (the home screen handles it). */
     static final int THEME = 9;
+    /** The "Wi-Fi" button: the TV's network settings, to pick a network. */
+    static final int WIFI = 10;
     /** Image size of each card (16:9; on screen it shows up to ~330 px wide). */
     static final int TILE_W = 384, TILE_H = 216;
 
@@ -193,9 +195,9 @@ final class HomeApps {
 
     // MARK: - Top buttons (the round ones at the top right)
 
-    static final String TOP_LIVE = "live", TOP_INPUTS = "inputs", TOP_SETTINGS = "settings", TOP_BLUETOOTH = "bluetooth", TOP_THEME = "theme";
-    /** From the corner leftward (the first one sits at the right edge): Settings, Bluetooth, Theme. */
-    static final List<String> TOP_DEFAULT = Collections.unmodifiableList(java.util.Arrays.asList(TOP_SETTINGS, TOP_BLUETOOTH, TOP_THEME));
+    static final String TOP_LIVE = "live", TOP_INPUTS = "inputs", TOP_SETTINGS = "settings", TOP_BLUETOOTH = "bluetooth", TOP_THEME = "theme", TOP_WIFI = "wifi";
+    /** From the corner leftward (the first one sits at the right edge): Settings, Wi-Fi, Bluetooth, Theme. */
+    static final List<String> TOP_DEFAULT = Collections.unmodifiableList(java.util.Arrays.asList(TOP_SETTINGS, TOP_WIFI, TOP_BLUETOOTH, TOP_THEME));
     static final int MAX_TOP = 5;
     /** Largest side, in pixels, of a top button's mark (drawn at up to ~50 px; mipmaps take it down smoothly). */
     private static final int MARK_PX = 160;
@@ -203,6 +205,15 @@ final class HomeApps {
     /** The keys of the top buttons, from the corner leftward (Settings > Top Buttons; TOP_DEFAULT until edited). */
     static List<String> topButtonKeys() {
         List<String> keys = Prefs.topButtons();
+        if (keys != null && !Prefs.wifiOffered()) {
+            // Wi-Fi came after the editor: once, it joins a list edited before, next to Bluetooth (or after Settings).
+            Prefs.setWifiOffered();
+            if (!keys.contains(TOP_WIFI) && keys.size() < MAX_TOP) {
+                int at = keys.indexOf(TOP_BLUETOOTH);
+                keys.add(at >= 0 ? at : Math.min(keys.size(), keys.indexOf(TOP_SETTINGS) + 1), TOP_WIFI);
+                Prefs.setTopButtons(keys);
+            }
+        }
         return keys != null ? keys : TOP_DEFAULT;
     }
 
@@ -225,6 +236,7 @@ final class HomeApps {
             case TOP_SETTINGS: return action(SETTINGS, TOP_SETTINGS, Ui.tr("light|Settings"), "settings");
             case TOP_BLUETOOTH: return action(BLUETOOTH, TOP_BLUETOOTH, "Bluetooth", "bluetooth");
             case TOP_THEME: return action(THEME, TOP_THEME, Ui.tr("Theme"), "theme");
+            case TOP_WIFI: return action(WIFI, TOP_WIFI, "Wi-Fi", "wifi");
             default: return null;
         }
     }
@@ -232,7 +244,7 @@ final class HomeApps {
     /** What can go in the top buttons, as {key, name}: the built-in ones (apps go on the shelf). */
     static List<String[]> topCandidates(Context c) {
         List<String[]> out = new ArrayList<>();
-        for (String key : new String[] {TOP_SETTINGS, TOP_BLUETOOTH, TOP_THEME, TOP_INPUTS, TOP_LIVE}) {
+        for (String key : new String[] {TOP_SETTINGS, TOP_WIFI, TOP_BLUETOOTH, TOP_THEME, TOP_INPUTS, TOP_LIVE}) {
             if (!key.equals(TOP_BLUETOOTH) || bluetooth(c) != null) out.add(new String[] {key, topBuiltIn(key).label});
         }
         return out;
@@ -559,6 +571,9 @@ final class HomeApps {
                 break;
             case ANDROID_SETTINGS:
                 intent = new Intent(Settings.ACTION_SETTINGS);
+                break;
+            case WIFI:
+                intent = new Intent(Settings.ACTION_WIFI_SETTINGS);
                 break;
             case BLUETOOTH:
                 intent = bluetooth(a);

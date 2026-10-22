@@ -491,7 +491,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             wake();
         });
         setLightButtons(HomeApps.topButtons(a, false));
-        if (glowOn()) scene.useGlow();
+        scene.useGlow();   // whenever no photo is shown: the clock, Continue Watching, the picks while they load
         recs.setLight(true);
         checkNight(false);
         sheetLayer.setVisibility(INVISIBLE);
@@ -765,6 +765,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         menuOptionPaint = Ui.text(Ui.medium, 30 * k, L_INK);
         if (menuOpen) layoutMenu();
         shadow.setMaskFilter(new BlurMaskFilter(SHADOW_BLUR * k, BlurMaskFilter.Blur.NORMAL));
+        // Dark on dark: dithered, so the soft edges and the gradients don't break into rings and bands.
+        shadow.setDither(true);
+        fill.setDither(true);
         shadowSoft.setMaskFilter(new BlurMaskFilter(12 * k, BlurMaskFilter.Blur.NORMAL));
         shadowDeep.setMaskFilter(new BlurMaskFilter(DEEP_BLUR * k, BlurMaskFilter.Blur.NORMAL));
         halo.setMaskFilter(new BlurMaskFilter(22 * k, BlurMaskFilter.Blur.NORMAL));
@@ -904,12 +907,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private void updatePalette() {
         HomeData.Weather wx = data.weather;
         Shaders.sky(scene.palette, System.currentTimeMillis(), wx.sunrise, wx.sunset);
-        if (glowOn()) {
-            // The light look: pale glows under the dark text; in between during the day ⇄ night transition.
-            float day = 1 - night;
-            if (day > 0.001f) scene.palette.mixTo(Shaders.GLOW_LIGHT, day);
-            scene.setLight(day);
-        }
+        // The light look: pale glows under the dark text; in between during the day ⇄ night transition. Also under a
+        // photo, so the glows are right when it goes.
+        float day = 1 - night;
+        if (day > 0.001f) scene.palette.mixTo(Shaders.GLOW_LIGHT, day);
+        scene.setLight(day);
         scene.applyPalette();
         if (glowOn() && bgTo == null && bgFadeAt == 0 && nightAt == 0) {
             neutralGlass();   // the glass's tone follows the palette (once a day ⇄ night transition is over)
@@ -1109,7 +1111,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     /** Redraws for the current night value (the glass now reads the lightened, blended or darkened photo). */
     private void nightChanged() {
-        if (glowOn()) updatePalette();   // the glows go pale or dark with the look
+        updatePalette();   // the glows go pale or dark with the look
         if (bgFadeAt == 0 && bgTo != null && bgTo.lightGlass != null) {
             scene.setFrost(frostOf(bgTo));
             if (nightAt != 0 && bgTo.nightGlass != null) {
@@ -3829,9 +3831,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         return Recs.hasKey(getContext());
     }
 
-    /** The drifting glows are the background whenever there are no picks (and so no photo). */
+    /** The drifting glows are the background whenever no photo is: no picks on top, or the picks before theirs. */
     private boolean glowOn() {
-        return !picksOn();
+        return !picksMode() || bgTo == null && bgFrom == null;
     }
 
     /** Moves the glows on (see GLOW_STEP_MS): only the background layer is redrawn. */
@@ -3943,7 +3945,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             cell.set(r.centerX() - rad, r.centerY() - rad, r.centerX() + rad, r.centerY() + rad);
             tmp.set(cell);
             tmp.offset(0, (6 + 8 * f) * k);
-            shadow.setColor(Ui.alpha(0xFF000000, tone(0.1f, 0.3f) + tone(0.14f, 0.2f) * f));
+            // At night a lighter shadow: on the dark background a strong one only showed as rings.
+            shadow.setColor(Ui.alpha(0xFF000000, tone(0.1f, 0.12f) + tone(0.14f, 0.16f) * f));
             shadows.draw(c, tmp, rad, SHADOW_BLUR * k, shadow);
             scene.liquid(c, cell, rad, tone(glassLight(), SMOKE), tone(0.55f, 0.5f), tone(0.02f, 0.01f), 12 * k, 8 * k,
                     tone(0.6f, 0.15f), 1 - f);

@@ -184,6 +184,11 @@ final class Prefs {
         return out;
     }
 
+    /** Whether the Wi-Fi button was offered to a top buttons list edited before it existed (HomeApps.topButtonKeys). */
+    static boolean wifiOffered() { return sp().getBoolean("topWifiOffered", false); }
+
+    static void setWifiOffered() { sp().edit().putBoolean("topWifiOffered", true).apply(); }
+
     static void setTopButtons(List<String> keys) {
         StringBuilder sb = new StringBuilder();
         for (String p : keys) sb.append(sb.length() == 0 ? "" : ",").append(p);

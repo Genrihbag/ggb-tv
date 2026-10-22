@@ -80,6 +80,7 @@ final class Recs {
         {"apple tv", "appletv", "com.apple.atve.sony.appletv"},   // Sony's own build
         {"hotstar", "hotstar", "in.startv.hotstar"},   // TMDB: "JioHotstar" (earlier "Disney Plus Hotstar")
         {"okko", "okko", "ru.more.play"},
+        {"kinopoisk", "kinopoisk", "ru.kinopoisk.tv"},
         {"crunchyroll", "crunchyroll", "com.crunchyroll.crunchyroid"},
         {"oneplay", "oneplay", "net.cme.voyo.cz.tvapp"},    // Czechia: Voyo and O2 TV became Oneplay, same app
     };
@@ -96,6 +97,7 @@ final class Recs {
         SERVICE_NAME.put("appletv", "Apple TV");
         SERVICE_NAME.put("hotstar", "JioHotstar");
         SERVICE_NAME.put("okko", "Okko");
+        SERVICE_NAME.put("kinopoisk", "Кинопоиск");
         SERVICE_NAME.put("crunchyroll", "Crunchyroll");
         SERVICE_NAME.put("oneplay", "Oneplay");
     }
@@ -395,15 +397,9 @@ final class Recs {
             String[] s = service(o.optString("provider_name"));
             if (s != null && installed(s[2])) services.put(o.getInt("provider_id"), s);
         }
-        if (services.isEmpty()) throw new IOException("none of the TV's streaming services are on TMDB");
-        StringBuilder ids = new StringBuilder();
-        for (int id : services.keySet()) ids.append(ids.length() == 0 ? "" : "|").append(id);
-        String common = "&language=" + lang() + "&watch_region=" + REGION + "&with_watch_monetization_types=flatrate&include_adult=false"
-                + "&sort_by=popularity.desc&with_watch_providers=" + URLEncoder.encode(ids.toString(), "UTF-8")
-                + (Config.HIDE_ANIMATION ? "&without_genres=" + ANIMATION : "");
         // 1. Trending this week (TMDB goes by what people are watching and searching for right now), only what is
         //    on one of the TV's services: the details say where (and are then ready).
-        List<Pick> hotMovies = new ArrayList<>(), hotShows = new ArrayList<>();
+        List<Pick> hotMovies = new ArrayList<>(), hotShows = new ArrayList<>(), allMovies = new ArrayList<>(), allShows = new ArrayList<>();
         for (String kind : new String[] {"movie", "tv"}) {
             JSONArray hot = get("/trending/" + kind + "/week?language=" + lang()).getJSONArray("results");
             List<Pick> candidates = new ArrayList<>();
@@ -414,9 +410,42 @@ final class Recs {
                 } catch (Exception e) {
                     continue;
                 }
+                (kind.equals("movie") ? allMovies : allShows).add(pick);
                 if (pick.pkg != null) (kind.equals("movie") ? hotMovies : hotShows).add(pick);
             }
         }
+        List<Pick> list = new ArrayList<>();
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        alternate(list, seen, hotMovies, hotShows, 24);
+        if (!services.isEmpty()) addReleases(list, seen, services);
+        if (list.isEmpty()) {
+            // Nothing on the TV's services by the region's data (Russia: TMDB's "where to watch" stopped in 2022): the
+            // trending titles as they are, and "Watch" opens the first service the TV has, if any.
+            String[] any = null;
+            for (String[] s : SERVICES) if (any == null && installed(s[2])) any = s;
+            for (List<Pick> all : java.util.Arrays.asList(allMovies, allShows)) {
+                for (Pick pick : all) {
+                    if (pick.pkg != null || any == null) continue;
+                    pick.app = any[1];
+                    pick.pkg = any[2];
+                    pick.meta = pick.meta.isEmpty() ? SERVICE_NAME.get(any[1]) : pick.meta + " · " + SERVICE_NAME.get(any[1]);
+                }
+            }
+            alternate(list, seen, allMovies, allShows, 24);
+        }
+        if (list.isEmpty()) throw new IOException("TMDB returned no recommendations");
+        picks = list;
+        period = p;
+        listAt = System.currentTimeMillis();
+        listLanguage = Ui.language;
+    }
+
+    private void addReleases(List<Pick> list, java.util.Set<String> seen, Map<Integer, String[]> services) throws Exception {
+        StringBuilder ids = new StringBuilder();
+        for (int id : services.keySet()) ids.append(ids.length() == 0 ? "" : "|").append(id);
+        String common = "&language=" + lang() + "&watch_region=" + REGION + "&with_watch_monetization_types=flatrate&include_adult=false"
+                + "&sort_by=popularity.desc&with_watch_providers=" + URLEncoder.encode(ids.toString(), "UTF-8")
+                + (Config.HIDE_ANIMATION ? "&without_genres=" + ANIMATION : "");
         // 2. Recent releases on the TV's services: movies from the past year and shows with a new episode in the
         //    past 3 months.
         JSONArray movies = get("/discover/movie?vote_count.gte=30&primary_release_date.gte=" + day(-365)
@@ -426,16 +455,8 @@ final class Recs {
         List<Pick> newMovies = new ArrayList<>(), newShows = new ArrayList<>();
         for (int i = 0; i < movies.length(); i++) add(newMovies, movies.getJSONObject(i), "movie");
         for (int i = 0; i < shows.length(); i++) add(newShows, shows.getJSONObject(i), "tv");
-        // Trending first, then the new releases; movies and shows alternating, without repeats, up to 24.
-        List<Pick> list = new ArrayList<>();
-        java.util.Set<String> seen = new java.util.HashSet<>();
-        alternate(list, seen, hotMovies, hotShows, 24);
+        // After the trending ones: movies and shows alternating, without repeats, up to 24.
         alternate(list, seen, newMovies, newShows, 24);
-        if (list.isEmpty()) throw new IOException("TMDB returned no recommendations");
-        picks = list;
-        period = p;
-        listAt = System.currentTimeMillis();
-        listLanguage = Ui.language;
     }
 
     /** Language of titles and genres (TMDB's "fr-FR", "zh-CN"…); the services come from the region. */
