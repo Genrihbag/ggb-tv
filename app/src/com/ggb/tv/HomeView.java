@@ -916,7 +916,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (day > 0.001f) scene.palette.mixTo(Shaders.GLOW_LIGHT, day);
         scene.setLight(day);
         scene.applyPalette();
-        if (glowOn() && bgTo == null && bgFadeAt == 0 && nightAt == 0) {
+        if (glowOn() && (bgTo == null || !PHOTO_GLASS) && bgFadeAt == 0 && nightAt == 0) {
             neutralGlass();   // the glass's tone follows the palette (once a day ⇄ night transition is over)
             platter.invalidate();
             status.invalidate();
@@ -1002,6 +1002,13 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     /** Swaps the background with a cross-fade (from one image to another, from the gradient to an image, or back). */
+    /** A picks photo: opaque down to PHOTO_FADE_FROM of the height, gone by PHOTO_FADE_TO (above the shelf). */
+    private static final float PHOTO_FADE_FROM = 0.42f, PHOTO_FADE_TO = 0.72f;
+    /** False: the glass never reads the photo (it doesn't reach the shelf), always the glows' tone. */
+    private static final boolean PHOTO_GLASS = false;
+    private final Paint photoFade = new Paint();
+    private int photoFadeH;
+
     private void showBackdrop(Backdrop b) {
         if (b == bgTo) return;
         long up = SystemClock.uptimeMillis();
@@ -1010,7 +1017,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         bgTo = b;
         bgFadeAt = up;
         nightPair = false;
-        if (b == null || glassOf(b) == null) return;
+        if (!PHOTO_GLASS || b == null || glassOf(b) == null) return;
         if (bgFrom == null || glassOf(bgFrom) == null) {
             scene.setFrost(frostOf(b));
             scene.setGlassImage(glassOf(b));
@@ -1115,7 +1122,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     /** Redraws for the current night value (the glass now reads the lightened, blended or darkened photo). */
     private void nightChanged() {
         updatePalette();   // the glows go pale or dark with the look
-        if (bgFadeAt == 0 && bgTo != null && bgTo.lightGlass != null) {
+        if (PHOTO_GLASS && bgFadeAt == 0 && bgTo != null && bgTo.lightGlass != null) {
             scene.setFrost(frostOf(bgTo));
             if (nightAt != 0 && bgTo.nightGlass != null) {
                 if (!nightPair) {
@@ -1127,7 +1134,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 scene.setGlassImage(glassOf(bgTo));
                 nightPair = false;
             }
-        } else if (bgFadeAt == 0 && bgTo == null) {
+        } else if (bgFadeAt == 0 && (bgTo == null || !PHOTO_GLASS)) {
             neutralGlass();
         }
         heroDirty = statusDirty = tilesDirty = drawerDirty = true;
@@ -1197,7 +1204,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private boolean tickBackgroundFade(long up) {
         if (bgFadeAt == 0) return false;
         float e = fadeEase(bgFadeAt, up);
-        if (bgTo != null && bgFrom != null && glassOf(bgFrom) != null && glassOf(bgTo) != null) {
+        if (PHOTO_GLASS && bgTo != null && bgFrom != null && glassOf(bgFrom) != null && glassOf(bgTo) != null) {
             if (drawerLayer.getVisibility() == VISIBLE || toast != null) {
                 int[] from = frostOf(bgFrom), to = frostOf(bgTo);
                 for (int i = 0; i < frostMix.length; i++) frostMix[i] = mix(from[i], to[i], e);
@@ -1208,7 +1215,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (e >= 1) {
             bgFadeAt = 0;
             bgFrom = null;
-            if (bgTo == null) {
+            if (bgTo == null || !PHOTO_GLASS) {
                 neutralGlass();
             } else {
                 scene.setFrost(frostOf(bgTo));
@@ -3769,43 +3776,30 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         long up = SystemClock.uptimeMillis();
         float e = bgFadeAt == 0 ? 1 : fadeEase(bgFadeAt, up);
         boolean fading = bgFadeAt != 0;
-        if (glowOn() && bgTo == null && bgFrom == null) {
-            // Dithered in its shader, so the dark gradient doesn't break into bands; the drawer's veil goes on top.
-            scene.drawBackground(c);
-            float veilAmount = tone(0.32f, 0.42f) * Ui.clamp(drawer.value);
-            if (veilAmount > 0.002f) {
-                fill.setShader(null);
-                fill.setColor(Ui.alpha(blend(0xFFFFFFFF, 0xFF000000, night), veilAmount));
-                c.drawRect(screen, fill);
+        // The glows are always the background (dithered in their shader, so the dark gradient doesn't band). A picks
+        // photo covers only the top and fades out above the shelf: the shelf's glass, the drawer and the widgets
+        // stay on the glows.
+        scene.drawBackground(c);
+        if (bgTo != null || fading && bgFrom != null) {
+            float bottom = h * PHOTO_FADE_TO;
+            if (photoFadeH != h) {
+                photoFadeH = h;
+                photoFade.setShader(new LinearGradient(0, h * PHOTO_FADE_FROM, 0, bottom, 0xFF000000, 0, Shader.TileMode.CLAMP));
+                photoFade.setXfermode(new android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.DST_IN));
             }
-            return;
+            int saved = c.saveLayer(0, 0, w, bottom, null);
+            if (fading && bgFrom != null) drawLightImage(c, bgFrom, bgTo == null ? 1 - e : 1);
+            if (bgTo != null) drawLightImage(c, bgTo, fading ? e : 1);
+            c.drawRect(0, 0, w, bottom, photoFade);
+            c.restoreToCount(saved);
         }
-        // Drawer open: the background lightens (by day) or darkens (at night), as a filter on the drawing itself.
-        android.graphics.ColorFilter v = veil(tone(0.32f, 0.42f) * Ui.clamp(drawer.value), blend(0xFFFFFFFF, 0xFF000000, night));
-        if (bgTo == null || (fading && bgFrom == null)) {
-            if (lightGradient == null) lightGradient = new LinearGradient(0, 0, 0, h, 0xFFF5F5F7, 0xFFE2E2E7, Shader.TileMode.CLAMP);
-            if (nightGradient == null) nightGradient = new LinearGradient(0, 0, 0, h, 0xFF1C1C1E, 0xFF0B0B0D, Shader.TileMode.CLAMP);
-            fill.setColorFilter(v);
-            fill.setColor(0xFF000000);
-            if (continueMode()) {
-                drawTint(c);
-            } else if (night < 0.999f) {
-                fill.setShader(lightGradient);
-                c.drawRect(screen, fill);
-            }
-            if (night > 0.001f && !continueMode()) {
-                fill.setShader(nightGradient);
-                fill.setAlpha(Math.round(255 * night));
-                c.drawRect(screen, fill);
-                fill.setAlpha(255);
-            }
+        // Drawer open: the background lightens (by day) or darkens (at night).
+        float veilAmount = tone(0.32f, 0.42f) * Ui.clamp(drawer.value);
+        if (veilAmount > 0.002f) {
             fill.setShader(null);
-            fill.setColorFilter(null);
+            fill.setColor(Ui.alpha(blend(0xFFFFFFFF, 0xFF000000, night), veilAmount));
+            c.drawRect(screen, fill);
         }
-        imagePaint.setColorFilter(v);
-        if (fading && bgFrom != null) drawLightImage(c, bgFrom, bgTo == null ? 1 - e : 1);
-        if (bgTo != null) drawLightImage(c, bgTo, fading ? e : 1);
-        imagePaint.setColorFilter(null);
     }
 
     /** The card's colour as a pale tint by day, a deep one at night, with a fixed shade toward the bottom. */
@@ -3924,9 +3918,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         return Recs.hasKey(getContext());
     }
 
-    /** The drifting glows are the background whenever no photo is: no picks on top, or the picks before theirs. */
+    /** The drifting glows are always the background: a picks photo only covers the top (drawLightSky). */
     private boolean glowOn() {
-        return !picksMode() || bgTo == null && bgFrom == null;
+        return true;
     }
 
     /** Moves the glows on (see GLOW_STEP_MS): only the background layer is redrawn. */

@@ -73,12 +73,15 @@ final class Recs {
     /** TMDB's Animation genre (movies and shows: cartoons and anime), left out with hide_animation=true. */
     private static final int ANIMATION = 16;
     private static final long LIST_EVERY = 6 * 3600_000L;
+    private static final int LIST_RULES = 3;
     /** Bump when what is saved for each title changes (the saved list is discarded and fetched again). */
     private static final int CACHE_VERSION = 3;
     private static final int MANHA = 0, TARDE = 1, NOITE = 2;
     /** Service name on TMDB (part of the name, lowercase) → TV app (HomeApps key, package). */
     private static final String[][] SERVICES = {
-        {"vokino", "vokino", "ru.vokino.web"},   // not on TMDB: first for picks without the region's data (Russia)
+        // Not on TMDB: the first installed of these is what picks open without the region's data (Russia).
+        {"vk video", "vkvideo", "com.vk.tv"},
+        {"vokino", "vokino", "ru.vokino.web"},
         {"netflix", "netflix", "com.netflix.ninja"},
         {"prime video", "prime", "com.amazon.amazonvideo.livingroom"},
         {"disney", "disney", "com.disney.disneyplus"},
@@ -110,6 +113,7 @@ final class Recs {
         SERVICE_NAME.put("hotstar", "JioHotstar");
         SERVICE_NAME.put("okko", "Okko");
         SERVICE_NAME.put("vokino", "ВоКино");
+        SERVICE_NAME.put("vkvideo", "VK Видео");
         SERVICE_NAME.put("kinopoisk", "Кинопоиск");
         SERVICE_NAME.put("crunchyroll", "Crunchyroll");
         SERVICE_NAME.put("oneplay", "Oneplay");
@@ -431,9 +435,10 @@ final class Recs {
         java.util.Set<String> seen = new java.util.HashSet<>();
         alternate(list, seen, hotMovies, hotShows, 24);
         if (!services.isEmpty()) addReleases(list, seen, services);
-        if (list.isEmpty()) {
-            // Nothing on the TV's services by the region's data (Russia: TMDB's "where to watch" stopped in 2022): the
-            // trending titles as they are, and "Watch" opens the first service the TV has, if any.
+        if (list.size() < 12) {
+            // Little or nothing on the TV's services by the region's data (Russia: TMDB's "where to watch" stopped in
+            // 2022, a few old titles match): the rest are the trending titles as they are, and "Watch" opens the
+            // first service the TV has, if any.
             String[] any = null;
             for (String[] s : SERVICES) if (any == null && installed(s[2])) any = s;
             for (List<Pick> all : java.util.Arrays.asList(allMovies, allShows)) {
@@ -634,7 +639,8 @@ final class Recs {
     }
 
     private long sourceStamp() {
-        long stamp = (Config.TMDB_KEY.hashCode() * 31L + REGION.hashCode()) * 31L + (Config.HIDE_ANIMATION ? 1 : 0);
+        // LIST_RULES: bumped when the way the list is made changes, so a saved list is made again.
+        long stamp = ((Config.TMDB_KEY.hashCode() * 31L + REGION.hashCode()) * 31L + (Config.HIDE_ANIMATION ? 1 : 0)) * 31L + LIST_RULES;
         for (String[] service : SERVICES) stamp = stamp * 31L + (installed(service[2]) ? service[2].hashCode() : 0);
         return stamp;
     }
