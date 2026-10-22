@@ -71,11 +71,12 @@
     ['hulu', /^hulu/, /hulu/i, ['#1CE783', '#0B8F4E']],
     ['paramount', /paramount|cbs/, /paramount/i, ['#0064FF', '#002A86']],
     ['peacock', /peacock/, /peacock/i, ['#1C1C1E', '#000000']],
+    ['nfl', /nfl/, /^nfl/i, ['#013369', '#00163D']],
     ['globoplay', /globoplay/, /globoplay/i, ['#FF8A1F', '#FF2D5A']],
     ['spotify', /spotify/, /spotify/i, ['#1DB954', '#0F7A36']]
   ];
   // More apps than SHELF_VISIBLE: the shelf scrolls, seven 190 px tiles under glass that spans the content width.
-  var SHELF_VISIBLE = 7, CAROUSEL_TILE_W = 190;
+  var SHELF_VISIBLE = 7;
 
   function shelfKey(app) {
     for (var i = 0; i < SHELF.length; i++) if (SHELF[i][1].test(app.id) || SHELF[i][2].test(app.title)) return SHELF[i];
@@ -293,12 +294,16 @@
 
   function renderShelf() {
     var n = shelf.length, gap = 48, pad = 40, carousel = n > SHELF_VISIBLE, shown = Math.min(n, SHELF_VISIBLE);
-    var tw = carousel ? CAROUSEL_TILE_W : Math.min(270, (1760 - Math.max(0, n - 1) * gap) / Math.max(1, n));
+    // 16:9 tiles, as on Android: never taller than 126, and the glass keeps its bottom edge; a carousel's seven fill
+    // the content width.
+    var tw = Math.min(126 * 16 / 9, (1760 - Math.max(0, shown - 1) * gap) / Math.max(1, shown)), th = tw * 9 / 16;
     var width = shown * tw + Math.max(0, shown - 1) * gap, left = (1920 - width) / 2;
     var platter = $('platter');
     platter.style.display = n ? '' : 'none';
     platter.style.left = (carousel ? 80 - pad : left - pad) + 'px';
     platter.style.width = (carousel ? 1760 + 2 * pad : width + 2 * pad) + 'px';
+    platter.style.top = (814 + 126 - th) + 'px';
+    platter.style.height = (th + 2 * pad) + 'px';
     $('quotes').style.right = (carousel ? 80 : 1920 - left - width) + 'px';
     $('shelf').style.clip = carousel ? 'rect(0px, ' + (1840 + pad) + 'px, 1080px, ' + (80 - pad) + 'px)' : 'auto';
     shelfStep = tw + gap;
@@ -307,7 +312,9 @@
     for (var i = 0; i < n; i++) {
       var t = el('div', 'tile', tiles);
       t.style.left = (left + i * (tw + gap)) + 'px';
+      t.style.top = (854 + 126 - th) + 'px';
       t.style.width = tw + 'px';
+      t.style.height = th + 'px';
       face(shelf[i], t, wordFit(shelf[i].title, tw, 30));
       hover(t, Z.SHELF, i);
     }
@@ -880,7 +887,12 @@
     checkNight();
   });
 
-  function reopened() { reset(); loadApps(function () { renderShelf(); renderDrawer(); Data.refresh(); }); }
+  function reopened() {
+    // LG: with handlesRelaunch the app has to come to the front itself, or opening it again while it runs shows nothing.
+    if (window.PalmSystem && window.PalmSystem.activate) window.PalmSystem.activate();
+    reset();
+    loadApps(function () { renderShelf(); renderDrawer(); Data.refresh(); });
+  }
 
   window.addEventListener('resize', fit);
   document.addEventListener('webOSRelaunch', reopened);   // LG: opened again while running

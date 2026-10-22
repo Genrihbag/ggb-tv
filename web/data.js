@@ -142,6 +142,16 @@ var Data = (function () {
   var COINS = ['BTC', 'ETH', 'SOL', 'USDT'];
   var CURRENCY = Place.currency;
   var QUOTE = CURRENCY === 'USD' ? 'USDT' : CURRENCY;
+  /** Binance refuses the whole request when it has no pairs in the currency (INR...): the prices go in dollars then. */
+  function inDollars() {
+    store('dollarsFor', CURRENCY);
+    CURRENCY = 'USD';
+    QUOTE = 'USDT';
+  }
+  if (stored('dollarsFor') === CURRENCY && CURRENCY !== 'USD') {
+    CURRENCY = 'USD';
+    QUOTE = 'USDT';
+  }
   var prices = [NaN, NaN, NaN, NaN], changes = [NaN, NaN, NaN, NaN], pricesAt = 0, fetchingPrices = false;
 
   /** Indexes in COINS of the coins that are on (the dollar only in Brazilian reais, where Binance lists it). */
@@ -176,13 +186,24 @@ var Data = (function () {
     if (!coins.length || fetchingPrices || (now - pricesAt < 5 * 60000 && now >= pricesAt)) return;
     fetchingPrices = true;
     var symbols = coins.map(function (i) { return '%22' + COINS[i] + QUOTE + '%22'; }).join(',');
-    get('https://api.binance.com/api/v3/ticker/24hr?type=MINI&symbols=%5B' + symbols + '%5D', {}, function (err, body) {
-      fetchingPrices = false;
-      if (err || !parsePrices(body)) return;
-      pricesAt = Date.now();
-      store('prices', {quote: QUOTE, body: body, at: pricesAt});
-      changed();
-    });
+    var path = '/api/v3/ticker/24hr?type=MINI&symbols=%5B' + symbols + '%5D';
+    // Binance.com refuses the US (HTTP 451); Binance.US answers the same call in dollars.
+    var hosts = ['https://api.binance.com', 'https://api.binance.us'];
+    (function next(h) {
+      get(hosts[h] + path, {}, function (err, body) {
+        // A pair Binance doesn't list (HTTP 400): the prices go in dollars.
+        if (err && err.message === 'HTTP 400' && QUOTE !== 'USDT') { fetchingPrices = false; inDollars(); refreshPrices(); return; }
+        if (err || !parsePrices(body)) {
+          if (h + 1 < hosts.length && !(err && err.message === 'HTTP 400')) next(h + 1);
+          else fetchingPrices = false;
+          return;
+        }
+        fetchingPrices = false;
+        pricesAt = Date.now();
+        store('prices', {quote: QUOTE, body: body, at: pricesAt});
+        changed();
+      });
+    })(0);
   }
 
   // MARK: - Picks (TMDB)
@@ -201,7 +222,9 @@ var Data = (function () {
     ['peacock', 'peacock', /peacock/, /peacock/i, 'Peacock'],
     ['globoplay', 'globoplay', /globoplay/, /globoplay/i, 'Globoplay'],
     ['max', 'max', /hbo|wbd|\.max/, /^(hbo )?max$|hbo max/i, 'Max'],
-    ['apple tv', 'appletv', /appletv|apple\.tv/, /apple tv/i, 'Apple TV']
+    ['apple tv', 'appletv', /appletv|apple\.tv/, /apple tv/i, 'Apple TV'],
+    ['hotstar', 'hotstar', /hotstar/, /hotstar/i, 'JioHotstar'],
+    ['crunchyroll', 'crunchyroll', /crunchyroll/, /crunchyroll/i, 'Crunchyroll']
   ];
 
   var installed = [];   // the TV's apps, from TV.apps()
@@ -244,7 +267,7 @@ var Data = (function () {
   }
 
   function sourceStamp() {
-    var s = KEY.length + ':' + KEY.slice(-6) + ':' + REGION;
+    var s = KEY.length + ':' + KEY.slice(-6) + ':' + REGION + (CONFIG.hideAnimation ? ':no-animation' : '');
     for (var i = 0; i < SERVICES.length; i++) s += appFor(SERVICES[i][1]) ? '1' : '0';
     return s;
   }
@@ -352,8 +375,17 @@ var Data = (function () {
     });
   }
 
+  /** TMDB's Animation genre (movies and shows: cartoons and anime), left out with hide_animation=true. */
+  var ANIMATION = 16;
+
+  function animated(o) {
+    for (var i = 0; o.genre_ids && i < o.genre_ids.length; i++) if (o.genre_ids[i] === ANIMATION) return true;
+    return false;
+  }
+
   function addPick(list, o, kind) {
     if (!o.backdrop_path) return;
+    if (CONFIG.hideAnimation && animated(o)) return;
     list.push({id: o.id, kind: kind, title: kind === 'movie' ? o.title : o.name, backdrop: o.backdrop_path, meta: '', app: null, detailed: false});
   }
 
@@ -385,7 +417,8 @@ var Data = (function () {
       }
       if (!ids.length) { done(new Error("none of the TV's streaming apps are on TMDB")); return; }
       var common = '&language=' + lang() + '&watch_region=' + REGION + '&with_watch_monetization_types=flatrate&include_adult=false'
-          + '&sort_by=popularity.desc&with_watch_providers=' + encodeURIComponent(ids.join('|'));
+          + '&sort_by=popularity.desc&with_watch_providers=' + encodeURIComponent(ids.join('|'))
+          + (CONFIG.hideAnimation ? '&without_genres=' + ANIMATION : '');
       var hot = {movie: [], tv: []}, fresh = {movie: [], tv: []};
       each(['movie', 'tv'], function (kind, next) {
         tmdb('/trending/' + kind + '/week?language=' + lang(), function (e, r) {
