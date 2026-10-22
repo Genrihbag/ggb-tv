@@ -698,10 +698,6 @@ public class SettingsActivity extends Activity {
         /** Home Settings: language, temperature, theme, sounds, top of the screen, its apps, weather, city, quotes, then one row per coin. */
         private static final int TOP_ROW = 4, WATCH_ROW = 5, CITY_ROW = 7, COIN_ROWS = 9;
 
-        private boolean dollar() {
-            return "BRL".equalsIgnoreCase(Config.CURRENCY.trim());
-        }
-
         private String[] settingLabels() {
             List<String> l = new ArrayList<>();
             l.add(Ui.tr("Language"));
@@ -713,10 +709,7 @@ public class SettingsActivity extends Activity {
             l.add(Ui.tr("Weather widget"));
             l.add(Ui.tr("City"));
             l.add(Ui.tr("Quotes widget"));
-            l.add("Bitcoin");
-            l.add("Ethereum");
-            l.add("Solana");
-            if (dollar()) l.add(Ui.tr("Dollar"));
+            for (int i = 0; i < HomeData.COINS.length; i++) l.add(HomeData.coinName(i));
             return l.toArray(new String[0]);
         }
 

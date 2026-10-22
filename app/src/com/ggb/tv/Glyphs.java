@@ -44,6 +44,17 @@ final class Glyphs {
         int slot = slot(coin), key = slot << 16 | frame;
         synchronized (BITMAPS) {
             if (BITMAPS.indexOfKey(key) >= 0) return BITMAPS.get(key);
+            String sign = SIGNS.get(coin);
+            if (sign != null) {
+                // A currency: its sign in the app's font, on the same frame as the coin logos.
+                Bitmap full = Bitmap.createBitmap(frame, frame, Bitmap.Config.ARGB_8888);
+                android.graphics.Paint p = Ui.text(Ui.semibold, frame * 0.8f, 0xFFFFFFFF);
+                p.setTextAlign(android.graphics.Paint.Align.CENTER);
+                new Canvas(full).drawText(sign, frame / 2f, frame / 2f + Ui.halfCap(p), p);
+                Bitmap signed = trimSides(full).extractAlpha();
+                BITMAPS.put(key, signed);
+                return signed;
+            }
             Drawable d = context.getDrawable(IDS[slot]);
             Bitmap b = null;
             if (d != null) {
@@ -75,6 +86,12 @@ final class Glyphs {
         return Bitmap.createBitmap(b, left, 0, right - left + 1, h);
     }
 
+    private static final java.util.Map<String, String> SIGNS = new java.util.HashMap<>();
+    static {
+        SIGNS.put("USD", "$");
+        SIGNS.put("EUR", "€");
+        SIGNS.put("CNY", "¥");
+    }
     private static final int[] IDS = {R.drawable.coin_btc, R.drawable.coin_eth, R.drawable.coin_sol, R.drawable.coin_usdt};
 
     private static int slot(String coin) {
@@ -82,6 +99,9 @@ final class Glyphs {
             case "BTC": return 0;
             case "ETH": return 1;
             case "SOL": return 2;
+            case "USD": return 4;
+            case "EUR": return 5;
+            case "CNY": return 6;
             default: return 3;
         }
     }

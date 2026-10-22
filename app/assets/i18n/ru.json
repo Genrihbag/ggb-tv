@@ -207,5 +207,8 @@
  "{n} min left": "осталось {n} мин",
  "{n} ms": "{n} мс",
  "{on} of {total}": "{on} из {total}",
- "← → to move · OK to drop · Back to cancel": "← → — переместить · OK — оставить · Назад — отмена"
+ "← → to move · OK to drop · Back to cancel": "← → — переместить · OK — оставить · Назад — отмена",
+ "Euro": "Евро",
+ "Yuan": "Юань",
+ "Exchange rates": "Курсы валют"
 }

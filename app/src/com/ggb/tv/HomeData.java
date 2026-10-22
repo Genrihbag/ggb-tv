@@ -28,21 +28,13 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Optional crypto prices (Binance, every 5 min) and weather/sunrise/sunset (Open-Meteo, every 30 min), cached
- * so the screen opens with numbers. Only fetched while the home screen or the screensaver is visible (the screen asks).
- * Neither source needs a key. Location and currency come from config.properties.
+ * Optional exchange rates (the dollar, the euro and the yuan in rubles, the Bank of Russia's, every hour) and
+ * weather/sunrise/sunset (Open-Meteo, every 30 min), cached so the screen opens with numbers. Only fetched while the
+ * home screen or the screensaver is visible (the screen asks). Neither source needs a key.
  */
 final class HomeData {
-    static final String[] COINS = {"BTC", "ETH", "SOL", "USDT"};
-    static final String[] COIN_NAMES = {"Bitcoin", "Ethereum", "Solana", "Dollar"};
-    private static final String CURRENCY = Config.CURRENCY.trim().toUpperCase(Locale.ROOT);
-    /** Binance has no pairs in some currencies (INR...) and then refuses the whole request: prices go in dollars instead. */
-    private static volatile boolean inDollars;
-
-    /** Binance quotes dollars as USDT. */
-    private static String quote() {
-        return CURRENCY.equals("USD") || inDollars ? "USDT" : CURRENCY;
-    }
+    /** The currencies, by their codes in the Bank of Russia's list (still called coins in the code and the prefs). */
+    static final String[] COINS = {"USD", "EUR", "CNY"};
     private static final String WEATHER_QUERY = "&current=temperature_2m,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset"
             + "&hourly=temperature_2m,weather_code,is_day&timezone=auto&forecast_days=2";
 
@@ -72,10 +64,9 @@ final class HomeData {
         }
         throw last;
     }
-    private static final long PRICES_EVERY = 5 * 60_000L, WEATHER_EVERY = 30 * 60_000L;
+    private static final long PRICES_EVERY = 60 * 60_000L, WEATHER_EVERY = 30 * 60_000L;
     interface Listener { void onData(); }
 
-    /** BTC, ETH and SOL; in Brazilian reais also the dollar (USDT/BRL), which Binance doesn't list for most currencies. */
     static int coinCount() {
         return Prefs.quotes() ? active().length : 0;
     }
@@ -83,13 +74,13 @@ final class HomeData {
     private static volatile int[] activeCoins;
     private static volatile int activeVersion = -1;
 
-    /** Indexes in COINS of the coins the user has on (and that Binance lists in this currency). */
+    /** Indexes in COINS of the currencies the user has on. */
     static int[] active() {
         int[] a = activeCoins;
         if (a != null && activeVersion == Prefs.version) return a;
         int n = 0;
         int[] tmp = new int[COINS.length];
-        for (int i = 0; i < COINS.length; i++) if (Prefs.coin(i) && (i < 3 || CURRENCY.equals("BRL"))) tmp[n++] = i;
+        for (int i = 0; i < COINS.length; i++) if (Prefs.coin(i)) tmp[n++] = i;
         a = java.util.Arrays.copyOf(tmp, n);
         activeCoins = a;
         activeVersion = Prefs.version;
@@ -105,28 +96,19 @@ final class HomeData {
     }
 
     static String coinName(int i) {
-        return i == 3 ? Ui.tr("Dollar") : COIN_NAMES[i];
+        return i == 0 ? Ui.tr("Dollar") : i == 1 ? Ui.tr("Euro") : Ui.tr("Yuan");
     }
 
-    /** Binance.com refuses the US (HTTP 451); Binance.US answers the same call in dollars. */
-    private static final String[] PRICE_HOSTS = {"https://api.binance.com", "https://api.binance.us"};
+    /** The Bank of Russia's rates as JSON (cbr-xml-daily.ru republishes them; no key), then the same on its other host. */
+    private static final String[] RATES = {"https://www.cbr-xml-daily.ru/daily_json.js", "https://cbr-xml-daily.ru/daily_json.js"};
 
-    private static String pricesPath() {
-        StringBuilder symbols = new StringBuilder();
-        int[] coins = active();
-        for (int i = 0; i < coins.length; i++) symbols.append(i == 0 ? "" : ",").append("%22").append(COINS[coins[i]]).append(quote()).append("%22");
-        return "/api/v3/ticker/24hr?type=MINI&symbols=%5B" + symbols + "%5D";
-    }
-
-    private static String getPrices() throws IOException {
+    private static String getRates() throws IOException {
         IOException failed = null;
-        for (String host : PRICE_HOSTS) {
+        for (String url : RATES) {
             try {
-                return get(host + pricesPath());
+                return get(url);
             } catch (IOException e) {
                 failed = e;
-                // A pair Binance doesn't list (HTTP 400) isn't a refusal: the caller falls back to dollars instead.
-                if ("HTTP 400".equals(e.getMessage())) break;
             }
         }
         throw failed;
@@ -151,9 +133,9 @@ final class HomeData {
         return instance;
     }
 
-    final double[] prices = {Double.NaN, Double.NaN, Double.NaN, Double.NaN};
-    /** 24 h change (%), in the same order. */
-    final double[] changes = {Double.NaN, Double.NaN, Double.NaN, Double.NaN};
+    final double[] prices = {Double.NaN, Double.NaN, Double.NaN};
+    /** Change since the previous rate (%), in the same order. */
+    final double[] changes = {Double.NaN, Double.NaN, Double.NaN};
     volatile long pricesAt, weatherAt;
     volatile Weather weather = new Weather();
 
@@ -166,7 +148,6 @@ final class HomeData {
 
     private HomeData(Context c) {
         cache = c.getSharedPreferences("homedata", Context.MODE_PRIVATE);
-        inDollars = CURRENCY.equals(cache.getString("dollarsFor", ""));
         try {
             if (Prefs.quotes()) {
                 String p = cache.getString("prices", null);
@@ -193,16 +174,7 @@ final class HomeData {
             fetchingPrices = true;
             io.execute(() -> {
                 try {
-                    String body;
-                    try {
-                        body = getPrices();
-                    } catch (IOException e) {
-                        if (inDollars || CURRENCY.equals("USD") || !"HTTP 400".equals(e.getMessage())) throw e;
-                        inDollars = true;
-                        cache.edit().putString("dollarsFor", CURRENCY).apply();
-                        AppLog.w("prices: Binance has no " + CURRENCY + " pairs, using dollars");
-                        body = getPrices();
-                    }
+                    String body = getRates();
                     parsePrices(body);
                     pricesAt = System.currentTimeMillis();
                     cache.edit().putString("prices", body).putLong("pricesAt", pricesAt).apply();
@@ -243,22 +215,16 @@ final class HomeData {
     }
 
     private void parsePrices(String body) throws Exception {
-        JSONArray list = new JSONArray(body);
-        String quote = quote();
-        int found = 0;
-        for (int i = 0; i < list.length(); i++) {
-            JSONObject o = list.getJSONObject(i);
-            String symbol = o.getString("symbol");
-            for (int k = 0; k < COINS.length; k++) {
-                if (!symbol.equals(COINS[k] + quote)) continue;
-                found++;
-                double last = Double.parseDouble(o.optString("lastPrice", o.optString("price", "NaN")));
-                double open = Double.parseDouble(o.optString("openPrice", "NaN"));
-                prices[k] = last;
-                changes[k] = open > 0 ? (last - open) / open * 100 : Double.NaN;
-            }
+        // {"Valute": {"USD": {"Nominal": 1, "Value": 81.12, "Previous": 81.97}, ...}}: rubles per Nominal units.
+        JSONObject valute = new JSONObject(body).getJSONObject("Valute");
+        for (int k = 0; k < COINS.length; k++) {
+            JSONObject o = valute.optJSONObject(COINS[k]);
+            if (o == null) continue;
+            double nominal = Math.max(1, o.optDouble("Nominal", 1));
+            double now = o.getDouble("Value") / nominal, before = o.optDouble("Previous", Double.NaN) / nominal;
+            prices[k] = now;
+            changes[k] = before > 0 ? (now - before) / before * 100 : Double.NaN;
         }
-        if (found == 0) pricesAt = 0;   // cached in another currency (config changed): fetch again
     }
 
     private static Weather parseWeather(String body) throws Exception {
@@ -416,14 +382,7 @@ final class HomeData {
     }
 
     private static String currencySymbol() {
-        switch (inDollars ? "USD" : CURRENCY) {
-            case "USD": return "$";
-            case "BRL": return "R$ ";
-            case "EUR": return "€";
-            case "GBP": return "£";
-            case "JPY": return "¥";
-            default: return CURRENCY + " ";
-        }
+        return "₽";
     }
 
     /** Celsius or Fahrenheit (config.properties "temperature": C, F, or auto = Fahrenheit in the US). */

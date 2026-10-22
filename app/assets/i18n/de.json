@@ -207,5 +207,8 @@
  "{n} min left": "noch {n} Min.",
  "{n} ms": "{n} ms",
  "{on} of {total}": "{on} von {total}",
- "← → to move · OK to drop · Back to cancel": "← → verschieben · OK ablegen · Zurück abbrechen"
+ "← → to move · OK to drop · Back to cancel": "← → verschieben · OK ablegen · Zurück abbrechen",
+ "Euro": "Euro",
+ "Yuan": "Yuan",
+ "Exchange rates": "Wechselkurse"
 }

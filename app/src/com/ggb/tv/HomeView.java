@@ -2015,7 +2015,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private void drawPrices(Canvas c, RectF r) {
         float x = r.left + 34 * k, right = r.right - 34 * k;
         refreshDrawerText();
-        c.drawText(Ui.tr("Crypto"), x, r.top + 54 * k, cardTitle);
+        c.drawText(Ui.tr("Exchange rates"), x, r.top + 54 * k, cardTitle);
         c.drawText(staleText, right, r.top + 54 * k, cardDimRight);
         float cap = Ui.cap(cardText);
         int[] coins = HomeData.active();
@@ -3242,7 +3242,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     /** The quotes card as TalkBack reads it: each coin with its price and 24 h change. */
     private String quotesText() {
-        StringBuilder s = new StringBuilder(Ui.tr("Crypto"));
+        StringBuilder s = new StringBuilder(Ui.tr("Exchange rates"));
         String stale = HomeData.staleness(data.pricesAt, 5 * 60_000L);
         s.append(", ").append(stale.isEmpty() ? Ui.tr("24h change") : Ui.trf("quotes|{ago}", "ago", stale)).append('.');
         for (int i : HomeData.active()) {
