@@ -126,6 +126,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         @Override public void focus(int id) { a11yFocus(id); }
         @Override public void click(int id) { activate(); }
         @Override public boolean clickable(int id) { return (id - 1) / 1000 != WIDGETS; }
+        @Override public boolean holdable(int id) { return (id - 1) / 1000 == GRID && canToggleShelf((id - 1) % 1000); }
+        @Override public void hold(int id) { a11yHold(); }
     });
     private final RectF a11yRect = new RectF();
     private final Layer sky, heroLayer, status, platter, tiles, drawerLayer, sheetLayer, toastLayer, revealLayer;
@@ -217,7 +219,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private Spring[] tileSlide = new Spring[0];
     private final Spring moveLift = new Spring(0.3f, 0.72f, 0);
     private List<HomeApps.Item> reorderOrigin;
-    private final Runnable holdStart = () -> { if (this.okDown && this.holdArmed) startReorder(); };
+    private final Runnable holdStart = () -> { if (this.okDown && this.holdArmed) hold(); };
 
     // Corner capsule
     private List<HomeApps.Item> statusItems = new ArrayList<>();
@@ -254,8 +256,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private final Spring sheet = new Spring(0.38f, 0.9f, 0);
     private final Spring scroll = new Spring(0.34f, 1f, 0);
     private final RectF focusedCell = new RectF();
-    private boolean sheetOpen;
+    private boolean sheetOpen, shelfEdited;
     private int gridIndex;
+    private long toggledAt;
 
     // Toasts
     private final ArrayDeque<String> toasts = new ArrayDeque<>();
@@ -1924,6 +1927,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         sheetOpen = false;
         sheet.target = 0;
         retarget(false);
+        if (shelfEdited) {     // the grid was kept as it was while open: apps that went to the shelf leave it now
+            shelfEdited = false;
+            reload();
+        }
     }
 
     private void retargetGrid(boolean snap) {
@@ -2247,17 +2254,18 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             case KeyEvent.KEYCODE_NUMPAD_ENTER:
                 // Opens on release, and only if the press happened here: the release of an OK pressed inside another
                 // app opens nothing.
-                // Held on a shelf app (~0.5 s): move mode. A timer, since not every remote repeats a held key, or the
-                // long-press repeat, whichever comes first; the release after a hold opens nothing.
+                // Held (~0.5 s) on a shelf app: move mode; on an app in All Apps: on or off the shelf. A timer, since
+                // not every remote repeats a held key, or the long-press repeat, whichever comes first; the release
+                // after a hold opens nothing.
                 if (down) {
                     if (e.getRepeatCount() == 0) {
                         okDown = true;
                         okHeld = false;
                         handler.removeCallbacks(holdStart);
-                        holdArmed = canReorder();
+                        holdArmed = sheetOpen ? canToggleShelf(gridIndex) : canReorder();
                         if (holdArmed) handler.postDelayed(holdStart, HOLD_MS);
                     } else if (okDown && holdArmed && e.isLongPress()) {
-                        startReorder();
+                        hold();
                     }
                 } else {
                     holdArmed = false;
@@ -2486,6 +2494,52 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         boolean opened = HomeApps.open(activity, it, this, Math.round(r.left), Math.round(r.top),
                 Math.round(r.width()), Math.round(r.height()));
         if (!opened) showToast(Ui.trf("Couldn't open {app}.", "app", it.label));
+    }
+
+    // MARK: - Holding OK: All Apps puts the app on the shelf or takes it off; on the shelf, the app is lifted to move
+
+    private void hold() {
+        if (sheetOpen) toggleShelf(); else startReorder();
+    }
+
+    /** TalkBack's long click on an app in All Apps (once per press, if the remote's hold also arrives). */
+    private void a11yHold() {
+        if (SystemClock.uptimeMillis() - toggledAt < 1000) return;
+        if (okDown) okHeld = true;     // the remote's release must not open the app
+        toggleShelf();
+    }
+
+    private boolean canToggleShelf(int i) {
+        if (!sheetOpen || i >= others.size()) return false;
+        HomeApps.Item it = others.get(i);
+        return it.kind == HomeApps.APP && it.pkg != null;
+    }
+
+    /** Puts the focused app at the end of the shelf, or takes it off if it's there; a toast says which. */
+    private void toggleShelf() {
+        handler.removeCallbacks(holdStart);
+        holdArmed = false;
+        if (!canToggleShelf(gridIndex)) return;
+        okHeld = true;
+        toggledAt = SystemClock.uptimeMillis();
+        final HomeApps.Item it = others.get(gridIndex);
+        final Context c = getContext().getApplicationContext();
+        click.open();
+        LOADER.execute(() -> {
+            // The shelf has no limit (it scrolls), so an app can always go on it.
+            List<String> list = new ArrayList<>(HomeApps.shelfPackages(c));
+            boolean on = list.contains(it.pkg);
+            list.remove(it.pkg);
+            if (!on) list.add(it.pkg);
+            final String text = on ? Ui.trf("Removed from the shelf: {app}", "app", it.label)
+                    : Ui.trf("Added to the shelf: {app}", "app", it.label);
+            Prefs.setShelf(list);   // here, so the next hold reads the new list
+            handler.post(() -> {
+                shelfEdited = true;
+                showToast(text);
+                reload();
+            });
+        });
     }
 
     // MARK: - Moving apps on the shelf
