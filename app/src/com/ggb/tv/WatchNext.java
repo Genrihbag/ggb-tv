@@ -57,6 +57,16 @@ final class WatchNext {
             return picture;
         }
 
+        /**
+         * Watched to the end in all but the credits, which people skip: over 90% of it, or for a movie-length one
+         * (an hour or more) under 12 minutes left. Then it isn't something to continue.
+         */
+        boolean nearlyDone() {
+            if (duration <= 0 || position <= 0) return false;
+            long left = duration - position;
+            return position >= duration * 0.9 || duration >= 60 * 60_000L && left < 12 * 60_000L;
+        }
+
         /** 0 to 1, or -1 when there is no position worth showing (not started, or no length). */
         float progress() {
             if (duration <= 0 || position < 1000 || position >= duration) return -1;
@@ -84,7 +94,7 @@ final class WatchNext {
         Set<String> off = Prefs.watchOff(), hidden = Prefs.watchHidden();
         for (java.util.Iterator<Item> i = all.iterator(); i.hasNext(); ) {
             Item it = i.next();
-            if (off.contains(it.pkg) || hidden.contains(hideKey(it))) i.remove();
+            if (off.contains(it.pkg) || hidden.contains(hideKey(it)) || it.nearlyDone()) i.remove();
         }
         Collections.sort(all, (a, b) -> Long.compare(b.engaged, a.engaged));
         List<Item> out = new ArrayList<>();
