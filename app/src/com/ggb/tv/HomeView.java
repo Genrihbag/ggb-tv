@@ -208,6 +208,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private boolean menuOpen;
     private int menuIndex;
     private WatchNext.Item menuItem;
+    /** The menu of an app in All Apps (held OK) instead of a card's: on or off the shelf, uninstall. */
+    private HomeApps.Item menuApp;
     private String menuTitle = "", menuSub = "";
     private float menuOptionsTop;
     private Paint menuTitlePaint, menuSubPaint, menuOptionPaint;
@@ -1651,9 +1653,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         float s = cell.height() / (tileH > 0 ? tileH : cell.height());
         Symbols.draw(getContext(), c, it.symbol, cell.centerX(), cell.top + cell.height() * 0.38f, 40 * k * s, ink);
         drawerLabel.setColor(ink);
-        drawerLabel.setTextSize(24 * k * s);
-        float wide = drawerLabel.measureText(it.label);
-        c.drawText(it.label, cell.centerX() - wide / 2, cell.top + cell.height() * 0.78f, drawerLabel);
+        drawerLabel.setTextSize(24 * k * s);   // centred by the paint itself
+        c.drawText(it.label, cell.centerX(), cell.top + cell.height() * 0.78f, drawerLabel);
     }
 
     /**
@@ -2692,7 +2693,54 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private void a11yHold() {
         if (SystemClock.uptimeMillis() - toggledAt < 1000) return;
         if (okDown) okHeld = true;     // the remote's release must not open the app
-        toggleShelf();
+        showAppMenu();
+    }
+
+    /** Held OK on an app in All Apps: a menu to put it on the shelf (or take it off) or to uninstall it. */
+    private void showAppMenu() {
+        handler.removeCallbacks(holdStart);
+        holdArmed = false;
+        if (menuOpen || !canToggleShelf(gridIndex) || menuTitlePaint == null) return;
+        okHeld = true;
+        okDown = false;     // the menu gets keys now: this press's release must not pick an option
+        toggledAt = SystemClock.uptimeMillis();
+        menuApp = others.get(gridIndex);
+        menuItem = null;
+        boolean onShelf = false;
+        for (HomeApps.Item it : shelf) onShelf |= menuApp.pkg.equals(it.pkg);
+        float width = (MENU_W - 2 * MENU_PAD) * k;
+        menuTitle = TextUtils.ellipsize(menuApp.label, new TextPaint(menuTitlePaint), width, TextUtils.TruncateAt.END).toString();
+        menuSub = "";
+        menuOptions[0] = onShelf ? Ui.tr("Remove from the shelf") : Ui.tr("Add to the shelf");
+        menuOptions[1] = Ui.tr("Uninstall");
+        menuOptions[2] = Ui.tr("Cancel");
+        layoutMenu();
+        menuOpen = true;
+        menuIndex = 0;
+        menuPick.snap(0);
+        menu.target = 1;
+        menuLayer.setVisibility(VISIBLE);
+        menuLayer.invalidate();
+        wake();
+        click.open();
+        spoken.focusMoved();
+    }
+
+    private void pickAppMenu(HomeApps.Item app, int choice) {
+        if (choice == 0) {
+            toggleShelf();
+        } else if (choice == 1) {
+            click.open();
+            // Android's own confirmation; All Apps reads the list again when the home screen comes back.
+            try {
+                getContext().startActivity(new Intent(Intent.ACTION_DELETE, android.net.Uri.parse("package:" + app.pkg))
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            } catch (ActivityNotFoundException | SecurityException e) {
+                showToast(Ui.trf("Couldn't open {app}.", "app", app.label));
+            }
+        } else {
+            click.move();
+        }
     }
 
     private boolean canToggleShelf(int i) {
@@ -3513,7 +3561,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         handler.removeCallbacks(holdStart);
         holdArmed = false;
         if (sheetOpen) {
-            toggleShelf();
+            showAppMenu();
         } else if (canReorder()) {
             startReorder();
         } else if (canHold()) {
@@ -3526,6 +3574,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private void showMenu() {
         if (menuOpen || !canHold() || menuTitlePaint == null) return;
         menuItem = watching.get(watchIndex);
+        menuApp = null;
         float width = (MENU_W - 2 * MENU_PAD) * k;
         String title = menuItem.title + (menuItem.episode != null ? " · " + menuItem.episode : "");
         menuTitle = TextUtils.ellipsize(title, new TextPaint(menuTitlePaint), width, TextUtils.TruncateAt.END).toString();
@@ -3624,8 +3673,14 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     private void pickMenu() {
         WatchNext.Item it = menuItem;
+        HomeApps.Item app = menuApp;
         int choice = menuIndex;
+        menuApp = null;
         closeMenu(false);
+        if (app != null) {
+            pickAppMenu(app, choice);
+            return;
+        }
         if (it == null) return;
         if (choice == 0) {
             click.open();

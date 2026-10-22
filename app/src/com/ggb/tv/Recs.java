@@ -61,8 +61,11 @@ final class Recs {
     private static volatile int apiHost;
     /** The backdrops: on a 720p UI, TMDB's 1280-wide copy shows the same and is lighter to download and decode. */
     private static final String IMAGES = "/t/p/" + (Backdrop.W <= 1280 ? "w1280" : "original");
-    /** TMDB's image server, then a mirror of it: some providers (in Russia) block image.tmdb.org but not the API. */
-    private static final String[] IMAGE_HOSTS = {"https://image.tmdb.org", "https://imagetmdb.com"};
+    /**
+     * TMDB's image server, then mirrors of it: Russian providers block image.tmdb.org, and slow anything big from
+     * Cloudflare (imagetmdb.com) to a stop, so the API mirror's own image proxy comes first.
+     */
+    private static final String[] IMAGE_HOSTS = {"https://image.tmdb.org", "https://imagetmdb.cub.red", "https://imagetmdb.com"};
     /** The host that answered last: a blocked one costs its timeout only once. */
     private static volatile int imageHost;
     /** TMDB's Animation genre (movies and shows: cartoons and anime), left out with hide_animation=true. */
@@ -73,6 +76,7 @@ final class Recs {
     private static final int MANHA = 0, TARDE = 1, NOITE = 2;
     /** Service name on TMDB (part of the name, lowercase) → TV app (HomeApps key, package). */
     private static final String[][] SERVICES = {
+        {"vokino", "vokino", "ru.vokino.web"},   // not on TMDB: first for picks without the region's data (Russia)
         {"netflix", "netflix", "com.netflix.ninja"},
         {"prime video", "prime", "com.amazon.amazonvideo.livingroom"},
         {"disney", "disney", "com.disney.disneyplus"},
@@ -103,6 +107,7 @@ final class Recs {
         SERVICE_NAME.put("appletv", "Apple TV");
         SERVICE_NAME.put("hotstar", "JioHotstar");
         SERVICE_NAME.put("okko", "Okko");
+        SERVICE_NAME.put("vokino", "ВоКино");
         SERVICE_NAME.put("kinopoisk", "Кинопоиск");
         SERVICE_NAME.put("crunchyroll", "Crunchyroll");
         SERVICE_NAME.put("oneplay", "Oneplay");
