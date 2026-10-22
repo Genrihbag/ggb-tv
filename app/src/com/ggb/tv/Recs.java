@@ -68,6 +68,8 @@ final class Recs {
     private static final String[] IMAGE_HOSTS = {"https://image.tmdb.org", "https://imagetmdb.cub.red", "https://imagetmdb.com"};
     /** The host that answered last: a blocked one costs its timeout only once. */
     private static volatile int imageHost;
+    /** The first few failures go to the log, by host: which mirror a provider blocks. */
+    private static int imageFailures;
     /** TMDB's Animation genre (movies and shows: cartoons and anime), left out with hide_animation=true. */
     private static final int ANIMATION = 16;
     private static final long LIST_EVERY = 6 * 3600_000L;
@@ -773,6 +775,7 @@ final class Recs {
                 break;
             } catch (IOException e) {
                 failed = e;
+                if (imageFailures++ < 6) AppLog.w("image " + IMAGE_HOSTS[host] + ": " + e);
             }
         }
         if (failed != null) throw failed;
