@@ -1506,7 +1506,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             q = quotes = new Quotes(coins, data.prices, text);
         }
         // On the tab row, at the right.
-        float base = clock ? L_QUOTES_BASE * k : (L_TABBAR_TOP + L_TABBAR_H / 2) * k + q.halfCap;
+        // Under the clock: in the weather's place when the weather line isn't shown (no gap under the date).
+        boolean weatherLine = Prefs.weather() && !Double.isNaN(data.weather.temp);
+        float base = clock ? (weatherLine ? L_QUOTES_BASE : L_WEATHER_BASE) * k : (L_TABBAR_TOP + L_TABBAR_H / 2) * k + q.halfCap;
         float cap = q.cap, gap = (clock ? 8 : 6) * k, spacing = (clock ? 32 : 24) * k;
         float total = spacing * (n - 1);
         for (int i = 0; i < n; i++) total += q.glyphs[i] + gap + q.widths[i];
@@ -1798,6 +1800,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     private void openDrawer() {
         if (drawerItems.isEmpty()) return;
+        layoutDrawer();   // the cards share the width by what's on now (a widget turned off in Settings gives its room)
         drawerOpen = true;
         drawer.target = 1;
         zone = Z_DRAWER;
