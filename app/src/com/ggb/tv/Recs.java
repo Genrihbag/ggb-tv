@@ -54,7 +54,11 @@ final class Recs {
 
     private static final String API = "https://api.themoviedb.org/3";
     /** The backdrops: on a 720p UI, TMDB's 1280-wide copy shows the same and is lighter to download and decode. */
-    private static final String IMAGES = "https://image.tmdb.org/t/p/" + (Backdrop.W <= 1280 ? "w1280" : "original");
+    private static final String IMAGES = "/t/p/" + (Backdrop.W <= 1280 ? "w1280" : "original");
+    /** TMDB's image server, then a mirror of it: some providers (in Russia) block image.tmdb.org but not the API. */
+    private static final String[] IMAGE_HOSTS = {"https://image.tmdb.org", "https://imagetmdb.com"};
+    /** The host that answered last: a blocked one costs its timeout only once. */
+    private static volatile int imageHost;
     /** TMDB's Animation genre (movies and shows: cartoons and anime), left out with hide_animation=true. */
     private static final int ANIMATION = 16;
     private static final long LIST_EVERY = 6 * 3600_000L;
@@ -704,7 +708,25 @@ final class Recs {
         //noinspection ResultOfMethodCallIgnored
         f.getParentFile().mkdirs();
         File part = new File(f.getPath() + ".part");
-        HttpURLConnection c = (HttpURLConnection) new URL(IMAGES + p.backdrop).openConnection();
+        IOException failed = null;
+        for (int i = 0; i < IMAGE_HOSTS.length; i++) {
+            int host = (imageHost + i) % IMAGE_HOSTS.length;
+            try {
+                fetch(IMAGE_HOSTS[host] + IMAGES + p.backdrop, part);
+                imageHost = host;
+                failed = null;
+                break;
+            } catch (IOException e) {
+                failed = e;
+            }
+        }
+        if (failed != null) throw failed;
+        if (!part.renameTo(f)) throw new IOException("couldn't save the image");
+        prune(f.getParentFile());
+    }
+
+    private static void fetch(String url, File part) throws IOException {
+        HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
         c.setConnectTimeout(8000);
         c.setReadTimeout(20000);
         try (InputStream in = c.getInputStream(); FileOutputStream out = new FileOutputStream(part)) {
@@ -718,8 +740,6 @@ final class Recs {
         } finally {
             c.disconnect();
         }
-        if (!part.renameTo(f)) throw new IOException("couldn't save the image");
-        prune(f.getParentFile());
     }
 
     /** Reads the photo (≥ the UI's width) and builds the backdrop (Backdrop: cards plus frosted and glass versions). */
