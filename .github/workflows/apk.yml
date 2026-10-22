@@ -1,0 +1,53 @@
+# Builds GGB-TV.apk on every push to main (a downloadable artifact) and, for a tag v*, publishes it as a release.
+# The settings and the keys never live in the repository, only in its secrets:
+#   CONFIG_PROPERTIES  the whole config.properties (TMDB key, city, coordinates...)
+#   KEYSTORE_B64       freemytv.keystore in base64: updates install over the TV's copy only with the same key
+name: APK
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+    paths-ignore: ["docs/**", "web/**", "*.md"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Settings and signing key from the secrets
+        env:
+          CONFIG_PROPERTIES: ${{ secrets.CONFIG_PROPERTIES }}
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+        run: |
+          [ -n "$CONFIG_PROPERTIES" ] || { echo "::error::Secret CONFIG_PROPERTIES is missing"; exit 1; }
+          [ -n "$KEYSTORE_B64" ] || { echo "::error::Secret KEYSTORE_B64 is missing"; exit 1; }
+          printf '%s\n' "$CONFIG_PROPERTIES" > config.properties
+          printf '%s' "$KEYSTORE_B64" | base64 -d > freemytv.keystore
+      - name: Build
+        run: |
+          bash build.sh
+          mv FreeMyTV.apk GGB-TV.apk
+          rm -f config.properties freemytv.keystore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GGB-TV
+          path: GGB-TV.apk
+          retention-days: 30
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" GGB-TV.apk --title "GGB TV $GITHUB_REF_NAME" --generate-notes
