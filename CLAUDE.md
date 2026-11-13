@@ -67,7 +67,7 @@ before you do it, and let them do the taps on the TV.
    *Risky app blocked*, "built for an older version of Android", since targetSdk is 33): they choose *More details* →
    *Install anyway* (updates don't ask again). Always through adb: an APK opened on the TV (a file manager, a browser)
    can get *App blocked to protect your device*, with no way past it, where Play Protect blocks sideloaded apps with an
-   accessibility service or a notification listener (#378). On TCL, also `adb shell "appops set io.freemytv AUTO_START allow || appops set io.freemytv APP_AUTO_START allow"`
+   accessibility service or a notification listener (#378). On TCL, also `adb shell "appops set com.ggb.tv AUTO_START allow || appops set com.ggb.tv APP_AUTO_START allow"`
    (some firmware calls the operation `APP_AUTO_START`; this tries both):
    TCL's `TclAppBoot` blocks background jobs by default, so the switch (and the watchdog) never run. The log shows
    `forbid bind service ... ModeJob`. An uninstall takes the permission back (moving from their own build to the
@@ -79,7 +79,7 @@ before you do it, and let them do the taps on the TV.
    has a second, separate background killer, `TGuard` (`com.tcl.guard`), which kills the app's processes about a second
    after any other app comes to the front. The switch's benchmark opens the original home screen a few times (that's
    the launcher flashing by during "Measuring…"), so TGuard can kill `ModeJob` there (log: `TGuardMemoryManagerKillHandler
-   ... tguard-kill`, then `Scheduling restart of crashed service io.freemytv/.ModeJob`). The JobScheduler runs the job
+   ... tguard-kill`, then `Scheduling restart of crashed service com.ggb.tv/.ModeJob`). The JobScheduler runs the job
    again by itself within a minute or two, and a benchmark that fails only logs now (it used to read as "Couldn't turn on
    Free My TV: Read timed out", #277). Tell them: if the settings screen closes on the stock launcher, wait a minute or two, then press
    Home; Free My TV opening confirms the switch. No `adb`/`appops` setting turns TGuard off (its content providers aren't
@@ -348,7 +348,7 @@ entries; its system pieces are in `PROTECTED`. USB debugging opens ADB on 5555 t
   are. Run `python3 tools/translate.py --check` to validate all catalogues without writing files.
   No right-to-left languages yet (the layout isn't mirrored); CJK and Devanagari use the system font.
   Comments in English, short, only where the why isn't obvious.
-- Settings come from `config.properties` through the generated `out/gen/io/freemytv/Config.java` (never edit that).
+- Settings come from `config.properties` through the generated `out/gen/com/ggb/tv/Config.java` (never edit that).
   Built with `--generic`, the place values are empty and `Place` fills them from the TV's time zone
   (`app/assets/zones.json`, written by `tools/make_zones.py` with `web/zones.js`).
   What the person changes on the TV (`Prefs`: Home Settings, Shelf, Remote Buttons, Sleep Timer) wins over those first values.
@@ -364,7 +364,7 @@ entries; its system pieces are in `PROTECTED`. USB debugging opens ADB on 5555 t
   `.lan`, `.home.arpa`, a one-word name) and lists its host in the generated `network_security_config.xml`, the one
   place cleartext is allowed. A new feature that talks to a server on the user's network goes through it too.
 - Keys that open the user's own servers (the Immich key) stay out of the APK, which any app on the TV can read:
-  `tools/send_key.py` writes one over adb to `Secrets` (`content://io.freemytv.secrets/<name>`, only adb's shell may,
+  `tools/send_key.py` writes one over adb to `Secrets` (`content://com.ggb.tv.secrets/<name>`, only adb's shell may,
   only the names in `Secrets.NAMES`) into the app's private files, and `Secrets.get` reads it. `content query`
   answers present and when, never the value, so the tool can tell it arrived; adb's `content write` needs
   Android 9. A new feature with such a

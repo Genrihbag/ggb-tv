@@ -1,4 +1,4 @@
-package io.freemytv;
+package com.ggb.tv;
 
 public final class SabrinaRemoteTest {
     private static int assertions;

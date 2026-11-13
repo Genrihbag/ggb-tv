@@ -1,4 +1,4 @@
-package io.freemytv;
+package com.ggb.tv;
 
 import java.util.ArrayList;
 import java.util.Arrays;
