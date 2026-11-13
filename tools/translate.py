@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
-"""Translation catalogues for the Android app (app/assets/i18n/<lang>.json).
+"""Translation catalogues for the Android app and the LG/Samsung web app (app/assets/i18n/<lang>.json).
 
     python3 tools/translate.py                 # extract en.json from the code, report what each language lacks
     python3 tools/translate.py --fill          # also translate the missing strings (needs ANTHROPIC_API_KEY)
+    python3 tools/translate.py --fill --lang pt   # a hand-translated language (HAND): filled only when named
     python3 tools/translate.py --fill --lang fr --model claude-haiku-5-5
     python3 tools/translate.py --check         # validate all catalogues without writing anything
     python3 tools/translate.py --prune         # also remove keys the code no longer uses
     python3 tools/translate.py --new fr        # start a catalogue for a new language (then --fill --lang fr)
 
 The English text in the code is the source: every Ui.tr("...") / Ui.trf("...", ...) / Ui.plural("...", n) call (the
-first argument), plus Ui.datePattern("format|..."). en.json maps each key to its English
+first argument), plus Ui.datePattern("format|..."), and in web/ the same calls without "Ui." (tr, trf, plural and
+formatDate; tools/webapp.py packs the keys the web app uses into its i18n.js). en.json maps each key to its English
 text: a key "context|Text" is "Text" in a given context (a word that needs another translation there), and "{name}"
 is a placeholder filled at runtime. A key "plural|one:{n} season|other:{n} seasons" (Ui.plural) is a count: each language
 gives one form per plural category it uses (CLDR: zero, one, two, few, many, other). Each <lang>.json maps the same keys
@@ -19,6 +21,8 @@ to that language.
 and only the ones a catalogue lacks (or whose placeholders don't match the English). Every translation it gets back
 is kept in tools/.i18n-cache.json under a hash of its key (context + English), so the same text is never sent twice.
 Without ANTHROPIC_API_KEY it only reports, and exits with 1 when a catalogue is incomplete. Standard library only.
+The languages in HAND are translated by hand (the reference catalogues): --fill reports what they lack but doesn't
+fill it unless --lang names the language.
 """
 import argparse
 import hashlib
@@ -31,10 +35,13 @@ import urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, "app", "src")
+WEB = os.path.join(ROOT, "web")
 I18N = os.path.join(ROOT, "app", "assets", "i18n")
 CACHE = os.path.join(ROOT, "tools", ".i18n-cache.json")   # translations made with --fill, by hash (not committed)
 DEFAULT_MODEL = "claude-haiku-5-5"
+HAND = {"pt", "es", "de", "ru", "th", "tr"}   # hand translations: --fill leaves them to a person unless --lang names one
 CALL = re.compile(r"\bUi\.(trf?|plural|datePattern)\(")
+WEB_CALL = re.compile(r"(?:(?<![\w.$])|(?<=\bI18N\.))(trf?|plural|formatDate)\(")
 PLURAL_FORM = re.compile(r"^(zero|one|two|few|many|other):")
 PLACEHOLDER = re.compile(r"\{[a-zA-Z_][a-zA-Z_0-9]*\}")
 
@@ -78,16 +85,17 @@ def java_args(text, start):
 
 
 LITERAL = re.compile(r'"((?:[^"\\]|\\.)*)"')
+JS_LITERAL = re.compile(r'"((?:[^"\\]|\\.)*)"|\'((?:[^\'\\]|\\.)*)\'')
 
 
-def java_string(arg):
+def java_string(arg, literal=LITERAL):
     """The value of an argument made only of string literals joined with +, else None."""
     rest, out = arg.strip(), []
     while rest:
-        m = LITERAL.match(rest)
+        m = literal.match(rest)
         if not m:
             return None
-        out.append(m.group(1))
+        out.append(next(g for g in m.groups() if g is not None))
         rest = rest[m.end():].strip()
         if rest.startswith("+"):
             rest = rest[1:].strip()
@@ -100,6 +108,11 @@ def java_string(arg):
 
 def calls():
     """Every translatable call in the code: yields (file, line, kind, [argument values or None])."""
+    yield from java_calls()
+    yield from web_calls()
+
+
+def java_calls():
     for dirpath, _, files in os.walk(SRC):
         for name in sorted(files):
             if not name.endswith(".java"):
@@ -115,6 +128,32 @@ def calls():
                 yield os.path.relpath(path, ROOT), line, m.group(1), [java_string(a) for a in args]
 
 
+def web_calls():
+    for name in sorted(os.listdir(WEB)):
+        if not name.endswith(".js") or name == "strings.js":   # strings.js is where the calls are made, not used
+            continue
+        path = os.path.join(WEB, name)
+        text = open(path, encoding="utf-8").read()
+        for m in WEB_CALL.finditer(text):
+            line = text.count("\n", 0, m.start()) + 1
+            prefix = text[text.rfind("\n", 0, m.start()) + 1:m.start()].lstrip()
+            if prefix.startswith(("*", "//", "/*")) or prefix.endswith("function "):
+                continue
+            args, _ = java_args(text, m.end())
+            yield os.path.relpath(path, ROOT), line, m.group(1), [java_string(a, JS_LITERAL) for a in args]
+
+
+def web_keys():
+    """The keys the web app uses, with the plain text of each "context|Text" one (its fallback)."""
+    keys = set()
+    for _, _, _, args in web_calls():
+        if args and args[0] is not None:
+            keys.add(args[0])
+            if "|" in args[0]:
+                keys.add(english_of(args[0]))
+    return keys
+
+
 def english_of(key):
     return key.split("|", 1)[1] if "|" in key else key
 
@@ -125,7 +164,7 @@ def extract():
     for path, line, kind, args in calls():
         key = args[0]
         if key is None:
-            print(f"warning: {path}:{line}: Ui.{kind} with text that isn't a string literal", file=sys.stderr)
+            print(f"warning: {path}:{line}: {kind} with text that isn't a string literal", file=sys.stderr)
             continue
         keys[key] = english_of(key)
     return dict(sorted(keys.items()))
@@ -139,7 +178,8 @@ def load(lang):
 
 
 def save(lang, data):
-    with open(os.path.join(I18N, lang + ".json"), "w", encoding="utf-8") as f:
+    # LF on every system: written in text mode on Windows, every line would change (\r\n).
+    with open(os.path.join(I18N, lang + ".json"), "w", encoding="utf-8", newline="\n") as f:
         json.dump(dict(sorted(data.items())), f, ensure_ascii=False, indent=1)
         f.write("\n")
 
@@ -207,6 +247,9 @@ def check(en):
         if not isinstance(cat, dict):
             errors.append(f"{lang}: catalogue must be a JSON object")
             continue
+        with open(os.path.join(I18N, lang + ".json"), "rb") as f:
+            if b"\r" in f.read():
+                errors.append(f"{lang}: CRLF line endings (the catalogues use LF: python3 tools/translate.py writes them so)")
         missing, obsolete, _ = problems(en, cat)
         for label, keys in (("missing key", missing), ("obsolete key", obsolete)):
             for key in keys:
@@ -234,7 +277,7 @@ def check(en):
 NAMES = {"pt": "Brazilian Portuguese", "es": "Spanish", "de": "German", "fr": "French", "it": "Italian", "nl": "Dutch",
          "pl": "Polish", "sv": "Swedish", "da": "Danish", "nb": "Norwegian Bokmål", "fi": "Finnish", "cs": "Czech",
          "ro": "Romanian", "tr": "Turkish", "ru": "Russian", "uk": "Ukrainian", "el": "Greek", "ja": "Japanese",
-         "ko": "Korean", "zh-CN": "Simplified Chinese", "hi": "Hindi", "id": "Indonesian", "vi": "Vietnamese",
+         "ko": "Korean", "zh-CN": "Simplified Chinese", "zh-TW": "Traditional Chinese (Taiwan)", "hi": "Hindi", "id": "Indonesian", "vi": "Vietnamese",
          "hu": "Hungarian", "bg": "Bulgarian", "hr": "Croatian", "sk": "Slovak", "th": "Thai", "ms": "Malay"}
 
 PROMPT = """Translate the user interface strings of a TV home screen app ("Free My TV") from English into {name} ({lang}).
@@ -302,7 +345,9 @@ def main():
         cat = load(lang)
         missing, obsolete, broken = problems(en, cat)
         todo = sorted(set(missing) | set(broken))
-        if a.fill and key and todo:
+        if a.fill and key and todo and lang in HAND and not a.lang:
+            print(f"{lang}: translated by hand, {len(todo)} left for a person (--lang {lang} fills them anyway)")
+        elif a.fill and key and todo:
             known = cache.setdefault(lang, {})
             for k in todo:   # translated before (same English, same context): no need to ask again
                 if digest(k) in known and fits(k, en[k], known[digest(k)]):
@@ -331,7 +376,7 @@ def main():
         for k in (missing + broken)[:8]:
             print(f"         {k!r}")
     if cache:
-        with open(CACHE, "w", encoding="utf-8") as f:
+        with open(CACHE, "w", encoding="utf-8", newline="\n") as f:
             json.dump(cache, f, ensure_ascii=False, indent=1, sort_keys=True)
     return 1 if incomplete else 0
 

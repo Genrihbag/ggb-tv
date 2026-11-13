@@ -1,0 +1,35 @@
+{
+  "paging": {
+    "page": 1,
+    "count": 1,
+    "maxPage": 1,
+    "itemsTotal": 1,
+    "prevUrl": null,
+    "nextUrl": null
+  },
+  "packages": [
+    {
+      "id": "io.freemytv",
+      "title": "Free My TV",
+      "iconUri": "https://freemytv.io/assets/icon-512.png",
+      "shortDescription": "A fast, ad-free home screen: your apps on a glass shelf, the weather and prices, day and night.",
+      "pool": "main",
+      "fullDescriptionUrl": "full_description.html",
+      "manifest": {
+        "id": "io.freemytv",
+        "version": "1.4.0",
+        "type": "web",
+        "title": "Free My TV",
+        "appDescription": "A fast, ad-free home screen: your apps on a glass shelf, the weather and prices, day and night.",
+        "iconUri": "https://freemytv.io/assets/icon-512.png",
+        "sourceUrl": "https://github.com/simbasjungles/free-my-tv",
+        "rootRequired": false,
+        "ipkUrl": "https://freemytv.io/webos/FreeMyTV-webos-1.4.0.ipk",
+        "ipkHash": {
+          "sha256": "991c3a24f002b1f02620c79a74286707ede52112da12edda420db82891966e09"
+        },
+        "ipkSize": 1461086
+      }
+    }
+  ]
+}

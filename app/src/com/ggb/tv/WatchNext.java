@@ -18,7 +18,7 @@ import java.util.Set;
 
 /**
  * What you were watching in your apps, from Android TV's own lists (TvContract, needs READ_TV_LISTINGS): the system
- * Watch Next list, where Netflix, Prime Video, YouTube, Plex and others note what you left half-way, and the home
+ * Watch Next list, where Prime Video, Disney+, HBO Max, Plex and others note what you left half-way, and the home
  * screen channels some apps publish under the name "Continue Watching" instead (Stremio). Newest first, a few per app,
  * so one show doesn't fill the row.
  */
@@ -114,7 +114,7 @@ final class WatchNext {
 
     /**
      * The apps that can feed Continue Watching (Settings, off the main thread): those allowed to write Android TV's
-     * lists, plus any publishing right now. As {package, name}, sorted by name, without Free My TV.
+     * lists, plus any publishing right now. As {package, name}, sorted by name, without GGB TV.
      */
     static List<String[]> sources(Context c) {
         Set<String> pkgs = new HashSet<>();
@@ -212,14 +212,18 @@ final class WatchNext {
                 TvContract.WatchNextPrograms.COLUMN_POSTER_ART_URI,
                 TvContract.WatchNextPrograms.COLUMN_THUMBNAIL_URI,
                 TvContract.WatchNextPrograms.COLUMN_INTENT_URI));
-        // Preview programs have no engagement time.
+        // Preview programs have no engagement time or Watch Next type.
         if (TvContract.WatchNextPrograms.CONTENT_URI.equals(uri)) {
             projection.add(TvContract.WatchNextPrograms.COLUMN_LAST_ENGAGEMENT_TIME_UTC_MILLIS);
+            projection.add(TvContract.WatchNextPrograms.COLUMN_WATCH_NEXT_TYPE);
         }
         try (Cursor cur = cr.query(uri, projection.toArray(new String[0]), null, null, null)) {
             if (cur == null) return out;
             while (cur.moveToNext()) {
                 if ("0".equals(text(cur, TvContract.WatchNextPrograms.COLUMN_BROWSABLE))) continue;
+                // Saved for later, not something you're in the middle of.
+                if (number(cur, TvContract.WatchNextPrograms.COLUMN_WATCH_NEXT_TYPE)
+                        == TvContract.WatchNextPrograms.WATCH_NEXT_TYPE_WATCHLIST) continue;
                 String title = text(cur, TvContract.WatchNextPrograms.COLUMN_TITLE);
                 String pkg = text(cur, TvContract.WatchNextPrograms.COLUMN_PACKAGE_NAME);
                 if (title == null || pkg == null) continue;

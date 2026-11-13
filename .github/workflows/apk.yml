@@ -1,5 +1,6 @@
 # Builds GGB-TV.apk only when run by hand (Actions → APK → Run workflow): a downloadable artifact and, with a
-# release name such as v2026.10.23, a GitHub release carrying it.
+# release name such as v2026.11.13 (the manifest's versionName with a v), a GitHub release carrying it: the TVs
+# with GGB TV find it there (Home Settings > Updates) and install it.
 # The settings and the keys never live in the repository, only in its secrets:
 #   CONFIG_PROPERTIES  the whole config.properties (TMDB key, city, coordinates...)
 #   KEYSTORE_B64       freemytv.keystore in base64: updates install over the TV's copy only with the same key
@@ -9,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       release:
-        description: "Release name (v2026.10.23); empty: only the artifact"
+        description: "Release name: v + versionName (v2026.11.13); empty: only the artifact"
         required: false
         default: ""
 
@@ -34,6 +35,15 @@ jobs:
           [ -n "$KEYSTORE_B64" ] || { echo "::error::Secret KEYSTORE_B64 is missing"; exit 1; }
           printf '%s\n' "$CONFIG_PROPERTIES" > config.properties
           printf '%s' "$KEYSTORE_B64" | base64 -d > freemytv.keystore
+      - name: Release name matches the version
+        if: inputs.release != ''
+        env:
+          RELEASE: ${{ inputs.release }}
+        run: |
+          # The TVs update by comparing the release's tag with their versionName: bump both in AndroidManifest.xml first
+          # (versionName 2026.11.13, versionCode 2026111300), then release as v2026.11.13.
+          NAME="$(grep -o 'android:versionName="[^"]*"' app/AndroidManifest.xml | cut -d'"' -f2)"
+          [ "$RELEASE" = "v$NAME" ] || { echo "::error::Release $RELEASE, but versionName is $NAME: bump AndroidManifest.xml"; exit 1; }
       - name: Build
         run: |
           bash build.sh
